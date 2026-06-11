@@ -103,7 +103,7 @@ export default function DeviceSelector({
   const handleToggle = (deviceId: string) => {
     if (!onChange) return;
     const device = devices.find((d) => d.id === deviceId);
-    if (!device || device.status === 'faulty') return;
+    if (!device || device.status === 'faulty' || device.status === 'maintenance') return;
 
     if (selectedIds.includes(deviceId)) {
       onChange(selectedIds.filter((id) => id !== deviceId));
@@ -170,7 +170,7 @@ export default function DeviceSelector({
           const typeConfig = deviceTypeConfig[device.type];
           const Icon = typeConfig.icon;
           const isSelected = selectedIds.includes(device.id);
-          const isDisabled = device.status === 'faulty';
+          const isDisabled = device.status === 'faulty' || device.status === 'maintenance';
 
           return (
             <div

@@ -141,6 +141,8 @@ export function detectTimeConflict(
           conflictingMeetingTitle: meeting.title,
           startTime: meeting.startTime,
           endTime: meeting.endTime,
+          reason: 'time-overlap',
+          description: '参会人时间冲突',
         });
       }
     }
@@ -168,13 +170,18 @@ export function detectAllConflicts(
     existingMeetings,
     meetingData.id
   );
-  const deviceConflicts = detectDeviceConflict(
+  const deviceTimeConflicts = detectDeviceConflict(
     meetingData.deviceIds,
     meetingData.startTime,
     meetingData.endTime,
     existingMeetings,
     devices,
     meetingData.id
+  );
+  const deviceCompatibilityConflicts = detectDeviceCompatibilityConflict(
+    meetingData.roomId,
+    meetingData.deviceIds,
+    devices
   );
   const timeConflicts = meetingData.attendeeIds
     ? detectTimeConflict(
@@ -185,7 +192,7 @@ export function detectAllConflicts(
         meetingData.id
       )
     : [];
-  return [...roomConflicts, ...deviceConflicts, ...timeConflicts];
+  return [...roomConflicts, ...deviceTimeConflicts, ...deviceCompatibilityConflicts, ...timeConflicts];
 }
 
 export function getConflictSummary(conflicts: ResourceConflict[]): {

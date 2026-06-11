@@ -217,10 +217,16 @@ function ConflictItem({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 text-xs text-white/70">
-          <Clock className="w-3 h-3" />
-          <span>{formatTimeRange(conflict.startTime, conflict.endTime)}</span>
-        </div>
+        {conflict.description ? (
+          <div className="text-xs text-white/80">
+            {conflict.description}
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 text-xs text-white/70">
+            <Clock className="w-3 h-3" />
+            <span>{formatTimeRange(conflict.startTime, conflict.endTime)}</span>
+          </div>
+        )}
       </div>
     </div>
   );

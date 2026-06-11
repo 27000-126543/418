@@ -32,7 +32,10 @@ function getAvailableDevicesForRoom(
   excludeMeetingId?: string
 ): Device[] {
   const compatibleDevices = devices.filter(
-    (d) => d.compatibleRooms.includes(roomId) && d.status !== 'faulty'
+    (d) =>
+      d.compatibleRooms.includes(roomId) &&
+      d.status !== 'faulty' &&
+      d.status !== 'maintenance'
   );
   const conflicts = detectDeviceConflict(
     compatibleDevices.map((d) => d.id),
@@ -170,11 +173,22 @@ export function generateAlternatives(
         (!meetingData.room || r.capacity >= meetingData.room.capacity)
     );
     for (const room of availableRooms) {
+      const availableDevices = getAvailableDevicesForRoom(
+        room.id,
+        meetingData.startTime,
+        meetingData.endTime,
+        devices,
+        existingMeetings,
+        meetingData.id
+      );
+      const suggestedDeviceIds = meetingData.deviceIds.length > 0
+        ? availableDevices.slice(0, meetingData.deviceIds.length).map((d) => d.id)
+        : [];
       const newConflicts = detectAllConflicts(
         {
           id: meetingData.id,
           roomId: room.id,
-          deviceIds: meetingData.deviceIds,
+          deviceIds: suggestedDeviceIds,
           startTime: meetingData.startTime,
           endTime: meetingData.endTime,
           attendeeIds,
@@ -183,14 +197,6 @@ export function generateAlternatives(
         devices
       );
       if (newConflicts.length === 0 || newConflicts.length < conflicts.length) {
-        const availableDevices = getAvailableDevicesForRoom(
-          room.id,
-          meetingData.startTime,
-          meetingData.endTime,
-          devices,
-          existingMeetings,
-          meetingData.id
-        );
         const deviceMatchRate = calculateDeviceMatchRate(
           meetingData.deviceIds,
           availableDevices,
@@ -214,7 +220,7 @@ export function generateAlternatives(
           adjustmentType: 'room',
           adjustmentReason: reason,
           confidence: 0,
-          conflictsResolved: conflicts.filter((c) => c.type === 'room'),
+          conflictsResolved: conflicts.filter((c) => c.type === 'room' || c.type === 'device'),
         };
         suggestion.confidence = calculateConfidence(
           suggestion,
@@ -232,11 +238,22 @@ export function generateAlternatives(
           ? addMinutes(meetingData.startTime, offset)
           : subtractMinutes(meetingData.startTime, Math.abs(offset));
         const newEnd = addMinutes(newStart, duration);
+        const availableDevices = getAvailableDevicesForRoom(
+          room.id,
+          newStart,
+          newEnd,
+          devices,
+          existingMeetings,
+          meetingData.id
+        );
+        const suggestedDeviceIds = meetingData.deviceIds.length > 0
+          ? availableDevices.slice(0, meetingData.deviceIds.length).map((d) => d.id)
+          : [];
         const newConflicts = detectAllConflicts(
           {
             id: meetingData.id,
             roomId: room.id,
-            deviceIds: meetingData.deviceIds,
+            deviceIds: suggestedDeviceIds,
             startTime: newStart,
             endTime: newEnd,
             attendeeIds,
@@ -245,14 +262,6 @@ export function generateAlternatives(
           devices
         );
         if (newConflicts.length === 0) {
-          const availableDevices = getAvailableDevicesForRoom(
-            room.id,
-            newStart,
-            newEnd,
-            devices,
-            existingMeetings,
-            meetingData.id
-          );
           const deviceMatchRate = calculateDeviceMatchRate(
             meetingData.deviceIds,
             availableDevices,
