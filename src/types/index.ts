@@ -134,6 +134,8 @@ export interface AlternativeSuggestion {
   suggestedEndTime: Date;
   suggestedRoomId?: string;
   suggestedRoomName?: string;
+  suggestedDeviceIds?: string[];
+  suggestedDevicesInfo?: Device[];
   adjustmentType: 'time' | 'room' | 'both';
   adjustmentReason: string;
   confidence: number;
@@ -204,6 +206,7 @@ export interface MeetingReport {
   keyDecisions: string[];
   roomUtilization: number;
   devicesUsed: string[];
+  cateringItems: string[];
   cateringCost: number;
 }
 

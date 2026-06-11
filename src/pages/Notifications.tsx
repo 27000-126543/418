@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { useMeetingStore } from '@/store/useMeetingStore';
+import { useUserStore } from '@/store/useUserStore';
 import InvitationCard from '@/components/notifications/InvitationCard';
 import ReminderSettings from '@/components/notifications/ReminderSettings';
 import {
@@ -27,24 +28,31 @@ const TABS: { id: FilterType; label: string; icon: typeof Bell }[] = [
 
 export default function Notifications() {
   const {
-    notifications,
-    getUnreadCount,
+    getNotificationsByUserId,
+    getUnreadNotificationsByUserId,
+    getNotificationsByType,
     markAllAsRead,
     respondToInvitation,
     markAsRead,
   } = useNotificationStore();
 
   const { updateAttendanceStatus, meetings } = useMeetingStore();
-  const currentUserId = 'user-003';
+  const { currentUser } = useUserStore();
 
   const [activeTab, setActiveTab] = useState<FilterType>('all');
   const [search, setSearch] = useState('');
   const [onlyUnread, setOnlyUnread] = useState(false);
 
-  const unreadCount = getUnreadCount();
+  const currentUserId = currentUser?.id ?? '';
+  const userNotifications = useMemo(() => {
+    return currentUserId ? getNotificationsByUserId(currentUserId) : [];
+  }, [currentUserId, getNotificationsByUserId]);
+  const unreadCount = useMemo(() => {
+    return currentUserId ? getUnreadNotificationsByUserId(currentUserId).length : 0;
+  }, [currentUserId, getUnreadNotificationsByUserId]);
 
   const filteredNotifications = useMemo(() => {
-    let result = [...notifications];
+    let result = [...userNotifications];
 
     if (activeTab !== 'all') {
       result = result.filter(n => n.type === activeTab);
@@ -69,29 +77,38 @@ export default function Notifications() {
     });
 
     return result;
-  }, [notifications, activeTab, onlyUnread, search]);
+  }, [userNotifications, activeTab, onlyUnread, search]);
 
   const tabsCount = useMemo(() => {
+    if (!currentUserId) {
+      return {
+        all: 0,
+        invitation: 0,
+        reminder: 0,
+        change: 0,
+        decision: 0,
+      } as Record<FilterType, number>;
+    }
     const map: Record<FilterType, number> = {
-      all: notifications.length,
-      invitation: notifications.filter(n => n.type === 'invitation').length,
-      reminder: notifications.filter(n => n.type === 'reminder').length,
-      change: notifications.filter(n => n.type === 'change').length,
-      decision: notifications.filter(n => n.type === 'decision').length,
+      all: userNotifications.length,
+      invitation: getNotificationsByType(currentUserId, 'invitation').length,
+      reminder: getNotificationsByType(currentUserId, 'reminder').length,
+      change: getNotificationsByType(currentUserId, 'change').length,
+      decision: getNotificationsByType(currentUserId, 'decision').length,
     };
     return map;
-  }, [notifications]);
+  }, [userNotifications, currentUserId, getNotificationsByType]);
 
   const unreadTabsCount = useMemo(() => {
     const map: Record<FilterType, number> = {
       all: unreadCount,
-      invitation: notifications.filter(n => n.type === 'invitation' && !n.read).length,
-      reminder: notifications.filter(n => n.type === 'reminder' && !n.read).length,
-      change: notifications.filter(n => n.type === 'change' && !n.read).length,
-      decision: notifications.filter(n => n.type === 'decision' && !n.read).length,
+      invitation: userNotifications.filter(n => n.type === 'invitation' && !n.read).length,
+      reminder: userNotifications.filter(n => n.type === 'reminder' && !n.read).length,
+      change: userNotifications.filter(n => n.type === 'change' && !n.read).length,
+      decision: userNotifications.filter(n => n.type === 'decision' && !n.read).length,
     };
     return map;
-  }, [notifications, unreadCount]);
+  }, [userNotifications, unreadCount]);
 
   const handleOpen = (n: Notification) => {
     if (!n.read) {
@@ -100,10 +117,10 @@ export default function Notifications() {
   };
 
   const handleMarkAllAsRead = useCallback(() => {
-    markAllAsRead();
-  }, [markAllAsRead]);
+    markAllAsRead(currentUserId || undefined);
+  }, [markAllAsRead, currentUserId]);
 
-  const handleRespond = useCallback((notificationId: string, status: AttendanceStatus, meetingId: string) => {
+  const handleRespond = useCallback((notificationId: string, status: AttendanceStatus, _meetingId: string) => {
     respondToInvitation(
       notificationId,
       status,
@@ -249,7 +266,7 @@ export default function Notifications() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: '总通知', value: notifications.length, icon: Inbox },
+                { label: '总通知', value: userNotifications.length, icon: Inbox },
                 { label: '未读', value: unreadCount, icon: Mail, accent: true },
                 {
                   label: '邀请',

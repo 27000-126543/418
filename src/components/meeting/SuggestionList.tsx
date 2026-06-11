@@ -9,6 +9,8 @@ import {
   Calendar,
   Building2,
   Shuffle,
+  Monitor,
+  Cpu,
 } from 'lucide-react';
 import type { AlternativeSuggestion } from '@/types';
 import { cn } from '@/lib/utils';
@@ -18,6 +20,7 @@ interface SuggestionListProps {
   originalStartTime?: Date;
   originalEndTime?: Date;
   originalRoomName?: string;
+  originalDeviceCount?: number;
   onApply?: (suggestion: AlternativeSuggestion) => void;
   className?: string;
 }
@@ -69,6 +72,7 @@ export default function SuggestionList({
   originalStartTime,
   originalEndTime,
   originalRoomName,
+  originalDeviceCount = 0,
   onApply,
   className,
 }: SuggestionListProps) {
@@ -217,6 +221,17 @@ export default function SuggestionList({
                           </span>
                         </div>
                       )}
+                      {originalDeviceCount > 0 && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Cpu className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                          <span className={cn(
+                            'text-neutral-600',
+                            suggestion.suggestedDeviceIds && 'line-through text-danger-500',
+                          )}>
+                            {originalDeviceCount} 台设备
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -259,6 +274,31 @@ export default function SuggestionList({
                           </span>
                         )}
                       </div>
+                      {suggestion.suggestedDevicesInfo && suggestion.suggestedDevicesInfo.length > 0 && (
+                        <div className="flex items-start gap-2 text-sm">
+                          <Monitor className="w-3.5 h-3.5 text-success-500 shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium text-success-700">
+                              配套设备（{suggestion.suggestedDevicesInfo.length} 台）
+                            </span>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {suggestion.suggestedDevicesInfo.slice(0, 3).map((device) => (
+                                <span
+                                  key={device.id}
+                                  className="px-1.5 py-0.5 rounded bg-success-100 text-success-700 text-[10px] font-medium"
+                                >
+                                  {device.name}
+                                </span>
+                              ))}
+                              {suggestion.suggestedDevicesInfo.length > 3 && (
+                                <span className="px-1.5 py-0.5 rounded bg-success-100/50 text-success-600 text-[10px]">
+                                  +{suggestion.suggestedDevicesInfo.length - 3}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

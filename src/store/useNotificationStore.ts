@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Notification, AttendanceStatus, Meeting } from '@/types';
+import { useMeetingStore } from './useMeetingStore';
 
 const generateId = (): string => {
   return 'notif_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
@@ -203,6 +204,12 @@ export const useNotificationStore = create<NotificationStore>((set, get) => {
         });
         return { notifications };
       });
+
+      useMeetingStore.getState().updateAttendanceStatus(
+        notification.meetingId,
+        notification.userId,
+        status
+      );
 
       if (onUpdateMeeting) {
         onUpdateMeeting(notification.meetingId, notification.userId, status);

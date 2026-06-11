@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Search,
   Bell,
@@ -9,18 +10,62 @@ import {
   LogOut,
   User,
   Settings as SettingsIcon,
+  Calendar,
+  RefreshCw,
+  ClipboardList,
+  ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { User as UserType } from '@/types';
-import { mockUsers } from '@/data/users';
+import { useNotificationStore } from '@/store/useNotificationStore';
+import { useUserStore } from '@/store/useUserStore';
+import { getRelativeTime } from '@/utils/dateUtils';
+import type { NotificationType } from '@/types';
 
 interface TopbarProps {
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
 }
 
+const getNotificationIcon = (type: NotificationType) => {
+  switch (type) {
+    case 'invitation':
+      return Calendar;
+    case 'reminder':
+      return Bell;
+    case 'change':
+      return RefreshCw;
+    case 'decision':
+      return ClipboardList;
+    default:
+      return Bell;
+  }
+};
+
+const getNotificationIconColor = (type: NotificationType): string => {
+  switch (type) {
+    case 'invitation':
+      return 'text-primary-500 bg-primary-50';
+    case 'reminder':
+      return 'text-accent-500 bg-accent-50';
+    case 'change':
+      return 'text-warning-500 bg-warning-50';
+    case 'decision':
+      return 'text-success-500 bg-success-50';
+    default:
+      return 'text-neutral-500 bg-neutral-50';
+  }
+};
+
 export default function Topbar({ sidebarOpen, onToggleSidebar }: TopbarProps) {
-  const currentUser: UserType = mockUsers[0];
+  const navigate = useNavigate();
+  const { currentUser } = useUserStore();
+  const {
+    getNotificationsByUserId,
+    getUnreadNotificationsByUserId,
+    markAsRead,
+    markAllAsRead,
+  } = useNotificationStore();
+
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -29,7 +74,23 @@ export default function Topbar({ sidebarOpen, onToggleSidebar }: TopbarProps) {
   const notificationRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  const unreadCount = 5;
+  const userNotifications = currentUser
+    ? getNotificationsByUserId(currentUser.id)
+    : [];
+  const unreadNotifications = currentUser
+    ? getUnreadNotificationsByUserId(currentUser.id)
+    : [];
+  const unreadCount = unreadNotifications.length;
+  const displayNotifications = userNotifications.slice(0, 8);
+
+  useEffect(() => {
+    if (showNotifications && currentUser && unreadCount > 0) {
+      const timer = setTimeout(() => {
+        markAllAsRead(currentUser.id);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [showNotifications, currentUser, unreadCount, markAllAsRead]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -109,24 +170,65 @@ export default function Topbar({ sidebarOpen, onToggleSidebar }: TopbarProps) {
                   <p className="text-xs text-white/70">{unreadCount} 条未读消息</p>
                 </div>
                 <div className="max-h-80 overflow-y-auto">
-                  {[1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className="cursor-pointer border-b border-neutral-50 px-4 py-3 transition-colors hover:bg-neutral-50"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-accent-500" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-neutral-800">
-                            会议提醒：Q2季度总结会
-                          </p>
-                          <p className="mt-0.5 text-xs text-neutral-500">
-                            将于今天下午 14:00 在 301会议室 开始
-                          </p>
-                        </div>
-                      </div>
+                  {displayNotifications.length === 0 ? (
+                    <div className="px-4 py-8 text-center">
+                      <Bell className="mx-auto h-8 w-8 text-neutral-300" />
+                      <p className="mt-2 text-sm text-neutral-500">暂无通知</p>
                     </div>
-                  ))}
+                  ) : (
+                    displayNotifications.map((notification) => {
+                      const IconComponent = getNotificationIcon(notification.type);
+                      const iconColorClass = getNotificationIconColor(notification.type);
+                      return (
+                        <div
+                          key={notification.id}
+                          onClick={() => {
+                            markAsRead(notification.id);
+                            navigate(`/meetings/${notification.meetingId}`);
+                            setShowNotifications(false);
+                          }}
+                          className="cursor-pointer border-b border-neutral-50 px-4 py-3 transition-colors hover:bg-neutral-50"
+                        >
+                          <div className="flex items-start gap-3">
+                            {!notification.read && (
+                              <div className="mt-2 h-2 w-2 shrink-0 rounded-full bg-accent-500" />
+                            )}
+                            <div className={cn('mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl', iconColorClass)}>
+                              <IconComponent className="h-4 w-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className={cn(
+                                  'text-sm font-medium truncate',
+                                  notification.read ? 'text-neutral-600' : 'text-neutral-800'
+                                )}>
+                                  {notification.title}
+                                </p>
+                                <span className="shrink-0 text-[10px] text-neutral-400">
+                                  {getRelativeTime(notification.createdAt)}
+                                </span>
+                              </div>
+                              <p className="mt-0.5 text-xs text-neutral-500 line-clamp-2">
+                                {notification.content}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+                <div className="border-t border-neutral-100 px-4 py-2">
+                  <button
+                    onClick={() => {
+                      navigate('/notifications');
+                      setShowNotifications(false);
+                    }}
+                    className="flex w-full items-center justify-center gap-1 py-2 text-xs font-medium text-primary-600 transition-colors hover:text-primary-700"
+                  >
+                    查看全部
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               </div>
             )}

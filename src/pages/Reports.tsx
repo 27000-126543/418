@@ -46,7 +46,7 @@ const addDays = (d: Date, days: number) => {
   return r;
 };
 
-const createInitialHistory = (meetings: { id: string; title: string; startTime: Date; room?: { name: string }; duration: number }[]): HistoryItem[] => {
+const createInitialHistory = (meetings: Array<{ id: string; title: string; startTime: Date; room?: { name: string }; duration: number; catering?: Array<{ name: string }> }>): HistoryItem[] => {
   const lastMonth = addDays(today, -30);
   const mockDecisions: DecisionRecord[] = [
     {
@@ -80,6 +80,7 @@ const createInitialHistory = (meetings: { id: string; title: string; startTime: 
     attendanceRate: 75 + (idx % 5) * 5,
     duration: m.duration || 60,
     cost: (idx + 1) * 200,
+    cateringItems: m.catering?.map(c => c.name) || [],
     decisions: idx === 0 ? mockDecisions : undefined,
   }));
 
@@ -178,6 +179,7 @@ export default function Reports() {
         attendanceRate: 70 + ((idx * 7) % 25),
         duration: m.duration || 60,
         cost: 100 + idx * 150,
+        cateringItems: m.catering?.map(c => c.name) || [],
       }));
 
     const reportTitles: Record<ReportType, string> = {

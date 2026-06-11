@@ -6,7 +6,7 @@ import type {
   Device,
   Attendee,
 } from '@/types';
-import { detectAllConflicts } from './conflictDetection';
+import { detectAllConflicts, detectDeviceConflict } from './conflictDetection';
 import { addMinutes, subtractMinutes, getMinutesDiff, generateId } from '@/utils/dateUtils';
 
 function hasExecutive(attendees: Attendee[]): boolean {
@@ -23,9 +23,53 @@ function getPriorityScore(meeting: Meeting | { attendees: Attendee[]; priority: 
   return score;
 }
 
+function getAvailableDevicesForRoom(
+  roomId: string,
+  startTime: Date,
+  endTime: Date,
+  devices: Device[],
+  existingMeetings: Meeting[],
+  excludeMeetingId?: string
+): Device[] {
+  const compatibleDevices = devices.filter(
+    (d) => d.compatibleRooms.includes(roomId) && d.status !== 'faulty'
+  );
+  const conflicts = detectDeviceConflict(
+    compatibleDevices.map((d) => d.id),
+    startTime,
+    endTime,
+    existingMeetings,
+    devices,
+    excludeMeetingId
+  );
+  const conflictedDeviceIds = new Set(conflicts.map((c) => c.resourceId));
+  return compatibleDevices.filter((d) => !conflictedDeviceIds.has(d.id));
+}
+
+function calculateDeviceMatchRate(
+  originalDeviceIds: string[],
+  suggestedDevices: Device[],
+  allDevices: Device[]
+): number {
+  if (originalDeviceIds.length === 0) return 1;
+  const originalDeviceTypes = new Set(
+    originalDeviceIds
+      .map((id) => allDevices.find((d) => d.id === id)?.type)
+      .filter(Boolean)
+  );
+  const suggestedDeviceTypes = new Set(suggestedDevices.map((d) => d.type));
+  let matchedCount = 0;
+  for (const type of originalDeviceTypes) {
+    if (suggestedDeviceTypes.has(type)) {
+      matchedCount++;
+    }
+  }
+  return originalDeviceTypes.size > 0 ? matchedCount / originalDeviceTypes.size : 1;
+}
+
 export function calculateConfidence(
   suggestion: AlternativeSuggestion,
-  original: { startTime: Date; endTime: Date; roomId: string }
+  original: { startTime: Date; endTime: Date; roomId: string; deviceIds?: string[]; devices?: Device[] }
 ): number {
   let score = 100;
   const timeDiff = getMinutesDiff(suggestion.suggestedStartTime, original.startTime);
@@ -41,6 +85,23 @@ export function calculateConfidence(
   }
   const conflictPenalty = (1 - suggestion.conflictsResolved.length * 0.05) * 100;
   score = (score * 0.6 + conflictPenalty * 0.4);
+
+  if (
+    (suggestion.adjustmentType === 'room' || suggestion.adjustmentType === 'both') &&
+    original.deviceIds &&
+    original.deviceIds.length > 0 &&
+    suggestion.suggestedDevicesInfo &&
+    original.devices
+  ) {
+    const deviceMatchRate = calculateDeviceMatchRate(
+      original.deviceIds,
+      suggestion.suggestedDevicesInfo,
+      original.devices
+    );
+    const deviceScore = deviceMatchRate * 15;
+    score = Math.min(100, score + deviceScore - 7.5);
+  }
+
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
@@ -95,7 +156,7 @@ export function generateAlternatives(
         confidence: 0,
         conflictsResolved: conflicts,
       };
-      suggestion.confidence = calculateConfidence(suggestion, meetingData);
+      suggestion.confidence = calculateConfidence(suggestion, { ...meetingData, devices });
       suggestions.push(suggestion);
       if (suggestions.length >= 5) break;
     }
@@ -122,6 +183,25 @@ export function generateAlternatives(
         devices
       );
       if (newConflicts.length === 0 || newConflicts.length < conflicts.length) {
+        const availableDevices = getAvailableDevicesForRoom(
+          room.id,
+          meetingData.startTime,
+          meetingData.endTime,
+          devices,
+          existingMeetings,
+          meetingData.id
+        );
+        const deviceMatchRate = calculateDeviceMatchRate(
+          meetingData.deviceIds,
+          availableDevices,
+          devices
+        );
+        let reason = '最小调整原则';
+        if (deviceMatchRate >= 0.8) {
+          reason = '设备高度兼容；' + reason;
+        } else if (deviceMatchRate > 0) {
+          reason = '设备部分兼容；' + reason;
+        }
         const suggestion: AlternativeSuggestion = {
           id: generateId(),
           originalStartTime: meetingData.startTime,
@@ -129,12 +209,17 @@ export function generateAlternatives(
           suggestedEndTime: meetingData.endTime,
           suggestedRoomId: room.id,
           suggestedRoomName: room.name,
+          suggestedDeviceIds: availableDevices.map((d) => d.id),
+          suggestedDevicesInfo: availableDevices,
           adjustmentType: 'room',
-          adjustmentReason: '最小调整原则',
+          adjustmentReason: reason,
           confidence: 0,
           conflictsResolved: conflicts.filter((c) => c.type === 'room'),
         };
-        suggestion.confidence = calculateConfidence(suggestion, meetingData);
+        suggestion.confidence = calculateConfidence(
+          suggestion,
+          { ...meetingData, deviceIds: meetingData.deviceIds, devices }
+        );
         suggestions.push(suggestion);
         if (suggestions.length >= 8) break;
       }
@@ -160,6 +245,25 @@ export function generateAlternatives(
           devices
         );
         if (newConflicts.length === 0) {
+          const availableDevices = getAvailableDevicesForRoom(
+            room.id,
+            newStart,
+            newEnd,
+            devices,
+            existingMeetings,
+            meetingData.id
+          );
+          const deviceMatchRate = calculateDeviceMatchRate(
+            meetingData.deviceIds,
+            availableDevices,
+            devices
+          );
+          let reason = '综合调整方案';
+          if (deviceMatchRate >= 0.8) {
+            reason = '设备高度兼容；' + reason;
+          } else if (deviceMatchRate > 0) {
+            reason = '设备部分兼容；' + reason;
+          }
           const suggestion: AlternativeSuggestion = {
             id: generateId(),
             originalStartTime: meetingData.startTime,
@@ -167,12 +271,17 @@ export function generateAlternatives(
             suggestedEndTime: newEnd,
             suggestedRoomId: room.id,
             suggestedRoomName: room.name,
+            suggestedDeviceIds: availableDevices.map((d) => d.id),
+            suggestedDevicesInfo: availableDevices,
             adjustmentType: 'both',
-            adjustmentReason: '综合调整方案',
+            adjustmentReason: reason,
             confidence: 0,
             conflictsResolved: conflicts,
           };
-          suggestion.confidence = calculateConfidence(suggestion, meetingData);
+          suggestion.confidence = calculateConfidence(
+            suggestion,
+            { ...meetingData, deviceIds: meetingData.deviceIds, devices }
+          );
           suggestions.push(suggestion);
           if (suggestions.length >= 10) break;
         }
@@ -206,4 +315,4 @@ export function filterSuggestionsByType(
   return suggestions.filter((s) => s.adjustmentType === type);
 }
 
-export { getPriorityScore };
+export { getPriorityScore, getAvailableDevicesForRoom, calculateDeviceMatchRate };

@@ -74,6 +74,7 @@ export function generateMeetingReport(meeting: Meeting): MeetingReport {
     keyDecisions: [...meeting.decisions],
     roomUtilization: calculateRoomUtilization(meeting),
     devicesUsed: meeting.devices.map((d) => d.name),
+    cateringItems: meeting.catering.map((c) => c.name),
     cateringCost: calculateCateringCost(meeting),
   };
 }

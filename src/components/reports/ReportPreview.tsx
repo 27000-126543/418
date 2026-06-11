@@ -37,6 +37,7 @@ export interface MeetingReportData {
   attendanceRate: number;
   duration: number;
   cost: number;
+  cateringItems: string[];
   decisions?: DecisionRecord[];
 }
 
@@ -413,6 +414,9 @@ function NewReportPreview({
                         <th className="text-left px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">
                           时长
                         </th>
+                        <th className="text-left px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">
+                          餐饮项目
+                        </th>
                         <th className="text-right px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">
                           成本
                         </th>
@@ -466,6 +470,13 @@ function NewReportPreview({
                               {formatDuration(r.duration)}
                             </span>
                           </td>
+                          <td className="px-6 py-4">
+                            <span className="text-xs text-neutral-600">
+                              {r.cateringItems && r.cateringItems.length > 0
+                                ? r.cateringItems.join('、')
+                                : '-'}
+                            </span>
+                          </td>
                           <td className="px-6 py-4 text-right">
                             <span className="text-sm font-bold text-warning-700">
                               {formatCurrency(r.cost)}
@@ -510,6 +521,9 @@ function NewReportPreview({
                             <Clock className="w-3 h-3" />
                             {formatDuration(totalDuration)}
                           </span>
+                        </td>
+                        <td className="px-6 py-4 text-xs font-semibold text-neutral-500">
+                          -
                         </td>
                         <td className="px-6 py-4 text-right">
                           <span className="text-base font-extrabold text-warning-700">

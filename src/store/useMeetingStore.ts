@@ -7,10 +7,14 @@ import type {
   AgendaItem,
   CreateMeetingData,
   Attendee,
+  Notification,
+  ResourceChange,
 } from '@/types';
 import { mockMeetings } from '@/data/meetings';
 import { mockUsers } from '@/data/users';
 import { useResourceStore } from './useResourceStore';
+import { useNotificationStore } from './useNotificationStore';
+import { createMeetingNotifications, createResourceChangeNotification } from '@/services/notificationService';
 
 const generateId = (): string => {
   return 'id_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
@@ -176,6 +180,22 @@ export const useMeetingStore = create<MeetingStore>((set, get) => ({
     set(state => ({
       meetings: [...state.meetings, newMeeting],
     }));
+
+    const allNotifications = createMeetingNotifications(newMeeting);
+    const attendeeNotifications = allNotifications.filter(n => {
+      const attendee = newMeeting.attendees.find(a => a.userId === n.userId);
+      return attendee && !attendee.isHost;
+    });
+    const notificationData: Array<Omit<Notification, 'id' | 'createdAt' | 'read'>> = attendeeNotifications.map(n => ({
+      type: n.type,
+      meetingId: n.meetingId,
+      meetingTitle: n.meetingTitle,
+      userId: n.userId,
+      title: n.title,
+      content: n.content,
+      actionRequired: n.actionRequired,
+    }));
+    useNotificationStore.getState().addBulkNotifications(notificationData);
 
     return newMeeting;
   },
@@ -373,7 +393,76 @@ export const useMeetingStore = create<MeetingStore>((set, get) => ({
     deviceIds: string[],
     cateringIds: string[]
   ) => {
-    return get().updateMeeting(meetingId, { deviceIds, cateringIds });
+    const meeting = get().getMeetingById(meetingId);
+    if (!meeting) return undefined;
+
+    const resourceStore = useResourceStore.getState();
+    const changes: ResourceChange[] = [];
+
+    const oldDeviceNames = meeting.devices.map(d => d.name);
+    const newDevices = resourceStore.devices.filter(d => deviceIds.includes(d.id));
+    const newDeviceNames = newDevices.map(d => d.name);
+
+    const oldDeviceIdsSet = new Set(meeting.deviceIds);
+    const newDeviceIdsSet = new Set(deviceIds);
+    const devicesChanged =
+      oldDeviceIdsSet.size !== newDeviceIdsSet.size ||
+      [...oldDeviceIdsSet].some(id => !newDeviceIdsSet.has(id));
+
+    if (devicesChanged) {
+      changes.push({
+        id: generateId(),
+        type: 'device',
+        field: '设备',
+        oldValue: oldDeviceNames,
+        newValue: newDeviceNames,
+        changedAt: new Date(),
+        changedBy: meeting.createdBy,
+        description: '会议设备已变更',
+      });
+    }
+
+    const oldCateringNames = meeting.catering.map(c => c.name);
+    const newCatering = resourceStore.cateringOptions.filter(c => cateringIds.includes(c.id));
+    const newCateringNames = newCatering.map(c => c.name);
+
+    const oldCateringIdsSet = new Set(meeting.cateringIds);
+    const newCateringIdsSet = new Set(cateringIds);
+    const cateringChanged =
+      oldCateringIdsSet.size !== newCateringIdsSet.size ||
+      [...oldCateringIdsSet].some(id => !newCateringIdsSet.has(id));
+
+    if (cateringChanged) {
+      changes.push({
+        id: generateId(),
+        type: 'catering',
+        field: '餐饮项目',
+        oldValue: oldCateringNames,
+        newValue: newCateringNames,
+        changedAt: new Date(),
+        changedBy: meeting.createdBy,
+        description: '会议餐饮项目已变更',
+      });
+    }
+
+    const updatedMeeting = get().updateMeeting(meetingId, { deviceIds, cateringIds });
+
+    if (changes.length > 0 && updatedMeeting) {
+      const notifications = createResourceChangeNotification(updatedMeeting, changes);
+      const notificationData: Array<Omit<Notification, 'id' | 'createdAt' | 'read'>> =
+        notifications.map(n => ({
+          type: n.type,
+          meetingId: n.meetingId,
+          meetingTitle: n.meetingTitle,
+          userId: n.userId,
+          title: n.title,
+          content: n.content,
+          actionRequired: n.actionRequired,
+        }));
+      useNotificationStore.getState().addBulkNotifications(notificationData);
+    }
+
+    return updatedMeeting;
   },
 
   addDecision: (meetingId: string, decision: string) => {

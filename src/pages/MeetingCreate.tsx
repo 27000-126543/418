@@ -10,15 +10,8 @@ import StatusBadge from '@/components/common/StatusBadge';
 import { useMeetingStore } from '@/store/useMeetingStore';
 import { useResourceStore } from '@/store/useResourceStore';
 import { useUserStore } from '@/store/useUserStore';
-import type {
-  CreateMeetingData,
-  MeetingPriority,
-  ResourceConflict,
-  AlternativeSuggestion,
-  User,
-  AttendanceStatus,
-} from '@/types';
 import {
+  CheckCircle2,
   CalendarDays,
   Clock,
   Users,
@@ -26,7 +19,6 @@ import {
   MapPin,
   Monitor,
   Coffee,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Search,
@@ -34,6 +26,15 @@ import {
   Building2,
   Sparkles,
 } from 'lucide-react';
+import type {
+  CreateMeetingData,
+  MeetingPriority,
+  ResourceConflict,
+  AlternativeSuggestion,
+  User,
+  AttendanceStatus,
+  DeviceType,
+} from '@/types';
 import { detectAllConflicts } from '@/services/conflictDetection';
 import { generateAlternatives } from '@/services/recommendationEngine';
 
@@ -82,6 +83,7 @@ export default function MeetingCreate() {
   const [attendeeSearch, setAttendeeSearch] = useState('');
   const [conflicts, setConflicts] = useState<ResourceConflict[]>([]);
   const [suggestions, setSuggestions] = useState<AlternativeSuggestion[]>([]);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const selectedDate = new Date(formData.date);
   const startDateTime = new Date(
@@ -190,6 +192,51 @@ export default function MeetingCreate() {
     }));
   };
 
+  const facilityToDeviceTypeMap: Record<string, DeviceType> = {
+    '投影仪': 'projector',
+    '白板': 'whiteboard',
+    '交互式白板': 'whiteboard',
+    '电子白板': 'whiteboard',
+    '视频会议系统': 'video-conferencing',
+    '视频会议': 'video-conferencing',
+    '扬声器': 'speaker',
+    '专业音响': 'speaker',
+    '音响系统': 'speaker',
+    '麦克风': 'microphone',
+    '无线麦克风': 'microphone',
+    '麦克风阵列': 'microphone',
+  };
+
+  const getAutoSelectedDevices = (roomId: string): string[] => {
+    const room = rooms.find(r => r.id === roomId);
+    if (!room) return [];
+    const availableRoomDevices = _availableDevices.filter(d =>
+      d.compatibleRooms.includes(roomId) && d.status === 'available'
+    );
+    const matchedTypeDeviceIds: string[] = [];
+    const matchedTypes = new Set<DeviceType>();
+    for (const facility of room.facilities) {
+      const deviceType = facilityToDeviceTypeMap[facility];
+      if (deviceType && !matchedTypes.has(deviceType)) {
+        const matchingDevice = availableRoomDevices.find(d => d.type === deviceType);
+        if (matchingDevice) {
+          matchedTypeDeviceIds.push(matchingDevice.id);
+          matchedTypes.add(deviceType);
+        }
+      }
+    }
+    return matchedTypeDeviceIds;
+  };
+
+  const handleSelectRoom = (roomId: string) => {
+    const autoSelectedIds = getAutoSelectedDevices(roomId);
+    setFormData(prev => ({
+      ...prev,
+      roomId,
+      deviceIds: autoSelectedIds,
+    }));
+  };
+
   const handleSuggestion = (s: AlternativeSuggestion) => {
     setFormData(prev => ({
       ...prev,
@@ -199,6 +246,7 @@ export default function MeetingCreate() {
         .slice(0, 5),
       endTime: new Date(s.suggestedEndTime).toTimeString().slice(0, 5),
       roomId: s.suggestedRoomId ?? prev.roomId,
+      deviceIds: s.suggestedDeviceIds ?? prev.deviceIds,
     }));
   };
 
@@ -240,11 +288,28 @@ export default function MeetingCreate() {
       attendeeUserIds: formData.attendeeIds,
     };
     const meeting = createMeeting(createData, currentUser.id);
-    navigate(`/meetings/${meeting.id}`);
+    setShowSuccess(true);
+    setTimeout(() => {
+      navigate(`/meetings/${meeting.id}`);
+    }, 1500);
   };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 animate-fade-in">
+      {showSuccess && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 animate-slide-down">
+          <div className="flex items-center gap-3 px-6 py-4 rounded-2xl bg-gradient-to-r from-success-500 to-accent-500 text-white shadow-xl shadow-success-500/30">
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold">会议创建成功</div>
+              <div className="text-xs text-white/80">正在跳转到会议详情页...</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div>
         <h1 className="text-2xl font-bold text-neutral-800 mb-1">发起新会议</h1>
         <p className="text-sm text-neutral-500">
@@ -477,7 +542,7 @@ export default function MeetingCreate() {
               <RoomGrid
                 rooms={rooms}
                 selectedRoomId={formData.roomId}
-                onSelectRoom={roomId => setFormData({ ...formData, roomId, deviceIds: [] })}
+                onSelectRoom={handleSelectRoom}
               />
             </div>
 
@@ -556,6 +621,7 @@ export default function MeetingCreate() {
                 originalStartTime={startDateTime}
                 originalEndTime={endDateTime}
                 originalRoomName={selectedRoom?.name}
+                originalDeviceCount={formData.deviceIds.length}
                 onApply={handleSuggestion}
               />
             )}
