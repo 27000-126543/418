@@ -1,0 +1,489 @@
+import type { Meeting, Attendee, AgendaItem, Material } from '@/types';
+import { users } from '@/data/users';
+import { rooms } from '@/data/rooms';
+import { devices, getDevicesByIds } from '@/data/devices';
+import { cateringOptions, getCateringByIds } from '@/data/catering';
+
+const createAttendee = (userId: string, status: Attendee['status'], isHost: boolean, respondedAt?: Date): Attendee => {
+  const user = users.find((u) => u.id === userId)!;
+  return {
+    userId,
+    user,
+    status,
+    respondedAt,
+    isHost,
+  };
+};
+
+const today = new Date('2026-06-11');
+
+const setTime = (date: Date, hour: number, minute: number): Date => {
+  const d = new Date(date);
+  d.setHours(hour, minute, 0, 0);
+  return d;
+};
+
+const addDays = (date: Date, days: number): Date => {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+};
+
+const sampleMaterials: Material[] = [
+  {
+    id: 'mat-001',
+    name: 'Q2季度财务报告.pdf',
+    type: 'pdf',
+    size: 2458624,
+    uploadedBy: 'user-005',
+    uploadedAt: new Date('2026-06-08T14:30:00'),
+    url: '/materials/q2-finance.pdf',
+  },
+  {
+    id: 'mat-002',
+    name: '产品路线图2026.pptx',
+    type: 'ppt',
+    size: 5242880,
+    uploadedBy: 'user-003',
+    uploadedAt: new Date('2026-06-09T09:15:00'),
+    url: '/materials/roadmap.pptx',
+  },
+  {
+    id: 'mat-003',
+    name: '市场调研报告.docx',
+    type: 'doc',
+    size: 1835008,
+    uploadedBy: 'user-004',
+    uploadedAt: new Date('2026-06-07T16:45:00'),
+    url: '/materials/market-research.docx',
+  },
+  {
+    id: 'mat-004',
+    name: '技术架构设计.pdf',
+    type: 'pdf',
+    size: 3145728,
+    uploadedBy: 'user-003',
+    uploadedAt: new Date('2026-06-10T11:20:00'),
+    url: '/materials/tech-arch.pdf',
+  },
+  {
+    id: 'mat-005',
+    name: '预算分配表.xlsx',
+    type: 'xlsx',
+    size: 524288,
+    uploadedBy: 'user-005',
+    uploadedAt: new Date('2026-06-06T10:00:00'),
+    url: '/materials/budget.xlsx',
+  },
+];
+
+export const mockMeetings: Meeting[] = [
+  {
+    id: 'meeting-001',
+    title: '2026年Q2季度战略规划会议',
+    description: '讨论公司Q2季度战略目标执行情况，调整下半年战略方向，确定重点投资领域。',
+    startTime: setTime(today, 9, 0),
+    endTime: setTime(today, 11, 30),
+    duration: 150,
+    expectedAttendees: 6,
+    priority: 'high',
+    roomId: 'room-002',
+    room: rooms.find((r) => r.id === 'room-002')!,
+    deviceIds: ['device-001', 'device-003', 'device-005', 'device-007', 'device-010'],
+    devices: getDevicesByIds(['device-001', 'device-003', 'device-005', 'device-007', 'device-010']),
+    cateringIds: ['catering-001', 'catering-007'],
+    catering: getCateringByIds(['catering-001', 'catering-007']),
+    attendees: [
+      createAttendee('user-001', 'confirmed', true, new Date('2026-06-09T08:00:00')),
+      createAttendee('user-002', 'confirmed', false, new Date('2026-06-09T09:30:00')),
+      createAttendee('user-003', 'confirmed', false, new Date('2026-06-09T10:15:00')),
+      createAttendee('user-004', 'tentative', false, new Date('2026-06-10T14:00:00')),
+      createAttendee('user-005', 'confirmed', false, new Date('2026-06-09T16:20:00')),
+      createAttendee('user-006', 'pending', false),
+    ],
+    agenda: [
+      { id: 'agenda-001', title: 'Q1季度业绩回顾', duration: 30, presenterId: 'user-005', order: 1 },
+      { id: 'agenda-002', title: 'Q2季度目标执行评估', duration: 40, presenterId: 'user-002', order: 2 },
+      { id: 'agenda-003', title: '市场竞争态势分析', duration: 30, presenterId: 'user-004', order: 3 },
+      { id: 'agenda-004', title: '下半年战略方向讨论', duration: 50, order: 4 },
+    ],
+    materials: [sampleMaterials[0], sampleMaterials[4]],
+    decisions: [],
+    status: 'scheduled',
+    createdAt: new Date('2026-06-05T10:00:00'),
+    createdBy: 'user-001',
+  },
+  {
+    id: 'meeting-002',
+    title: '新产品发布技术评审会',
+    description: '对即将发布的新产品V2.0进行技术评审，检查核心功能模块、性能指标和安全合规性。',
+    startTime: setTime(today, 14, 0),
+    endTime: setTime(today, 16, 0),
+    duration: 120,
+    expectedAttendees: 8,
+    priority: 'high',
+    roomId: 'room-001',
+    room: rooms.find((r) => r.id === 'room-001')!,
+    deviceIds: ['device-001', 'device-003', 'device-005', 'device-008'],
+    devices: getDevicesByIds(['device-001', 'device-003', 'device-005', 'device-008']),
+    cateringIds: ['catering-002', 'catering-005'],
+    catering: getCateringByIds(['catering-002', 'catering-005']),
+    attendees: [
+      createAttendee('user-003', 'confirmed', true, new Date('2026-06-08T11:00:00')),
+      createAttendee('user-007', 'confirmed', false, new Date('2026-06-08T11:30:00')),
+      createAttendee('user-002', 'confirmed', false, new Date('2026-06-08T14:00:00')),
+      createAttendee('user-004', 'confirmed', false, new Date('2026-06-09T09:00:00')),
+      createAttendee('user-005', 'declined', false, new Date('2026-06-08T17:00:00')),
+      createAttendee('user-006', 'confirmed', false, new Date('2026-06-09T10:30:00')),
+      createAttendee('user-001', 'confirmed', false, new Date('2026-06-09T08:00:00')),
+      createAttendee('user-008', 'pending', false),
+    ],
+    agenda: [
+      { id: 'agenda-005', title: '产品架构总览', duration: 25, presenterId: 'user-003', order: 1 },
+      { id: 'agenda-006', title: '核心功能演示', duration: 35, presenterId: 'user-007', order: 2 },
+      { id: 'agenda-007', title: '性能测试报告', duration: 25, order: 3 },
+      { id: 'agenda-008', title: '安全合规审查', duration: 20, order: 4 },
+      { id: 'agenda-009', title: '发布计划确认', duration: 15, order: 5 },
+    ],
+    materials: [sampleMaterials[1], sampleMaterials[3]],
+    decisions: [],
+    status: 'scheduled',
+    createdAt: new Date('2026-06-07T14:30:00'),
+    createdBy: 'user-003',
+  },
+  {
+    id: 'meeting-003',
+    title: '销售团队周例会',
+    description: '本周销售数据汇报、客户问题反馈、下周重点工作计划安排。',
+    startTime: setTime(addDays(today, -2), 10, 0),
+    endTime: setTime(addDays(today, -2), 11, 30),
+    duration: 90,
+    expectedAttendees: 5,
+    priority: 'medium',
+    roomId: 'room-005',
+    room: rooms.find((r) => r.id === 'room-005')!,
+    deviceIds: ['device-002', 'device-003', 'device-008'],
+    devices: getDevicesByIds(['device-002', 'device-003', 'device-008']),
+    cateringIds: ['catering-003'],
+    catering: getCateringByIds(['catering-003']),
+    attendees: [
+      createAttendee('user-004', 'confirmed', true, new Date('2026-06-06T09:00:00')),
+      createAttendee('user-002', 'confirmed', false, new Date('2026-06-06T10:15:00')),
+      createAttendee('user-006', 'confirmed', false, new Date('2026-06-06T11:30:00')),
+      createAttendee('user-007', 'late', false, new Date('2026-06-07T08:45:00')),
+      createAttendee('user-008', 'absent', false, new Date('2026-06-07T09:05:00')),
+    ],
+    agenda: [
+      { id: 'agenda-010', title: '上周销售业绩通报', duration: 20, presenterId: 'user-004', order: 1 },
+      { id: 'agenda-011', title: '重点客户跟进情况', duration: 30, order: 2 },
+      { id: 'agenda-012', title: '问题与困难反馈', duration: 20, order: 3 },
+      { id: 'agenda-013', title: '下周工作目标', duration: 20, order: 4 },
+    ],
+    materials: [sampleMaterials[2]],
+    decisions: [
+      '增加华东地区销售资源投入',
+      '启动大客户专项攻坚计划',
+    ],
+    status: 'completed',
+    createdAt: new Date('2026-06-03T16:00:00'),
+    createdBy: 'user-004',
+    actualStartTime: setTime(addDays(today, -2), 10, 5),
+    actualEndTime: setTime(addDays(today, -2), 11, 25),
+  },
+  {
+    id: 'meeting-004',
+    title: '财务系统升级项目启动会',
+    description: '财务系统升级项目正式启动，明确项目范围、时间节点、责任分工。',
+    startTime: setTime(addDays(today, 1), 9, 30),
+    endTime: setTime(addDays(today, 1), 11, 0),
+    duration: 90,
+    expectedAttendees: 6,
+    priority: 'medium',
+    roomId: 'room-001',
+    room: rooms.find((r) => r.id === 'room-001')!,
+    deviceIds: ['device-001', 'device-003', 'device-005'],
+    devices: getDevicesByIds(['device-001', 'device-003', 'device-005']),
+    cateringIds: ['catering-004', 'catering-007'],
+    catering: getCateringByIds(['catering-004', 'catering-007']),
+    attendees: [
+      createAttendee('user-005', 'confirmed', true, new Date('2026-06-08T10:00:00')),
+      createAttendee('user-003', 'confirmed', false, new Date('2026-06-08T11:20:00')),
+      createAttendee('user-001', 'confirmed', false, new Date('2026-06-09T08:30:00')),
+      createAttendee('user-006', 'confirmed', false, new Date('2026-06-09T14:00:00')),
+      createAttendee('user-007', 'tentative', false, new Date('2026-06-10T09:15:00')),
+      createAttendee('user-008', 'pending', false),
+    ],
+    agenda: [
+      { id: 'agenda-014', title: '项目背景与目标', duration: 20, presenterId: 'user-005', order: 1 },
+      { id: 'agenda-015', title: '项目范围界定', duration: 25, order: 2 },
+      { id: 'agenda-016', title: '实施计划与里程碑', duration: 25, presenterId: 'user-003', order: 3 },
+      { id: 'agenda-017', title: '团队分工与协作机制', duration: 20, order: 4 },
+    ],
+    materials: [sampleMaterials[4]],
+    decisions: [],
+    status: 'scheduled',
+    createdAt: new Date('2026-06-08T09:00:00'),
+    createdBy: 'user-005',
+  },
+  {
+    id: 'meeting-005',
+    title: '员工培训体系建设讨论会',
+    description: '讨论公司员工培训体系建设方案，包括课程设计、讲师选拔、考核机制等。',
+    startTime: setTime(addDays(today, 3), 14, 0),
+    endTime: setTime(addDays(today, 3), 15, 30),
+    duration: 90,
+    expectedAttendees: 4,
+    priority: 'low',
+    roomId: 'room-003',
+    room: rooms.find((r) => r.id === 'room-003')!,
+    deviceIds: ['device-003', 'device-008'],
+    devices: getDevicesByIds(['device-003', 'device-008']),
+    cateringIds: ['catering-008'],
+    catering: getCateringByIds(['catering-008']),
+    attendees: [
+      createAttendee('user-006', 'confirmed', true, new Date('2026-06-09T10:00:00')),
+      createAttendee('user-008', 'confirmed', false, new Date('2026-06-09T10:30:00')),
+      createAttendee('user-004', 'tentative', false, new Date('2026-06-10T08:45:00')),
+      createAttendee('user-003', 'confirmed', false, new Date('2026-06-10T11:00:00')),
+    ],
+    agenda: [
+      { id: 'agenda-018', title: '现状调研结果分享', duration: 25, presenterId: 'user-006', order: 1 },
+      { id: 'agenda-019', title: '培训课程体系设计', duration: 30, order: 2 },
+      { id: 'agenda-020', title: '讲师团队建设方案', duration: 20, order: 3 },
+      { id: 'agenda-021', title: '效果评估与考核机制', duration: 15, order: 4 },
+    ],
+    materials: [],
+    decisions: [],
+    status: 'scheduled',
+    createdAt: new Date('2026-06-09T09:30:00'),
+    createdBy: 'user-006',
+  },
+  {
+    id: 'meeting-006',
+    title: '年度预算编制会议',
+    description: '2027年度公司整体预算编制工作启动，各部门提交初步预算方案。',
+    startTime: setTime(addDays(today, -10), 9, 0),
+    endTime: setTime(addDays(today, -10), 12, 0),
+    duration: 180,
+    expectedAttendees: 8,
+    priority: 'high',
+    roomId: 'room-004',
+    room: rooms.find((r) => r.id === 'room-004')!,
+    deviceIds: ['device-001', 'device-003', 'device-005', 'device-007', 'device-009'],
+    devices: getDevicesByIds(['device-001', 'device-003', 'device-005', 'device-007', 'device-009']),
+    cateringIds: ['catering-001', 'catering-006'],
+    catering: getCateringByIds(['catering-001', 'catering-006']),
+    attendees: [
+      createAttendee('user-001', 'confirmed', true, new Date('2026-05-28T09:00:00')),
+      createAttendee('user-002', 'confirmed', false, new Date('2026-05-28T10:15:00')),
+      createAttendee('user-003', 'confirmed', false, new Date('2026-05-29T08:30:00')),
+      createAttendee('user-004', 'confirmed', false, new Date('2026-05-29T14:00:00')),
+      createAttendee('user-005', 'confirmed', false, new Date('2026-05-28T16:00:00')),
+      createAttendee('user-006', 'confirmed', false, new Date('2026-05-30T09:00:00')),
+      createAttendee('user-007', 'confirmed', false, new Date('2026-05-30T10:30:00')),
+      createAttendee('user-008', 'confirmed', false, new Date('2026-05-30T11:00:00')),
+    ],
+    agenda: [
+      { id: 'agenda-022', title: '2026年预算执行情况回顾', duration: 35, presenterId: 'user-005', order: 1 },
+      { id: 'agenda-023', title: '2027年经营目标与假设', duration: 40, presenterId: 'user-001', order: 2 },
+      { id: 'agenda-024', title: '各部门预算初步方案汇报', duration: 60, order: 3 },
+      { id: 'agenda-025', title: '预算编制工作部署', duration: 45, order: 4 },
+    ],
+    materials: [sampleMaterials[0], sampleMaterials[4]],
+    decisions: [
+      '2027年营收目标增长18%',
+      '研发投入占比提升至15%',
+      '市场拓展费用增加25%',
+      '全面启动数字化转型预算',
+    ],
+    status: 'completed',
+    createdAt: new Date('2026-05-25T14:00:00'),
+    createdBy: 'user-005',
+    actualStartTime: setTime(addDays(today, -10), 9, 0),
+    actualEndTime: setTime(addDays(today, -10), 12, 10),
+  },
+  {
+    id: 'meeting-007',
+    title: '市场部头脑风暴 - 品牌升级方案',
+    description: '围绕品牌升级主题进行头脑风暴，收集创意方案，筛选可行方向。',
+    startTime: setTime(addDays(today, -5), 15, 0),
+    endTime: setTime(addDays(today, -5), 17, 0),
+    duration: 120,
+    expectedAttendees: 5,
+    priority: 'medium',
+    roomId: 'room-006',
+    room: rooms.find((r) => r.id === 'room-006')!,
+    deviceIds: ['device-003', 'device-005'],
+    devices: getDevicesByIds(['device-003', 'device-005']),
+    cateringIds: ['catering-005', 'catering-002'],
+    catering: getCateringByIds(['catering-005', 'catering-002']),
+    attendees: [
+      createAttendee('user-004', 'confirmed', true, new Date('2026-06-02T10:00:00')),
+      createAttendee('user-006', 'confirmed', false, new Date('2026-06-02T10:30:00')),
+      createAttendee('user-008', 'confirmed', false, new Date('2026-06-02T11:00:00')),
+      createAttendee('user-002', 'confirmed', false, new Date('2026-06-03T09:00:00')),
+      createAttendee('user-007', 'late', false, new Date('2026-06-03T14:30:00')),
+    ],
+    agenda: [
+      { id: 'agenda-026', title: '当前品牌现状诊断', duration: 25, presenterId: 'user-004', order: 1 },
+      { id: 'agenda-027', title: '竞品品牌策略分析', duration: 25, order: 2 },
+      { id: 'agenda-028', title: '创意发散 - 品牌定位方向', duration: 40, order: 3 },
+      { id: 'agenda-029', title: '方案筛选与后续行动', duration: 30, order: 4 },
+    ],
+    materials: [sampleMaterials[2]],
+    decisions: [
+      '品牌定位聚焦高端智能科技',
+      'VI系统全面升级，预计Q3完成',
+      '启动品牌代言人调研工作',
+    ],
+    status: 'completed',
+    createdAt: new Date('2026-06-01T16:30:00'),
+    createdBy: 'user-004',
+    actualStartTime: setTime(addDays(today, -5), 15, 8),
+    actualEndTime: setTime(addDays(today, -5), 16, 55),
+  },
+  {
+    id: 'meeting-008',
+    title: '行政后勤月度协调会',
+    description: '月度行政后勤工作协调，办公环境改善、物资采购、安全检查等事项。',
+    startTime: setTime(addDays(today, -20), 11, 0),
+    endTime: setTime(addDays(today, -20), 12, 0),
+    duration: 60,
+    expectedAttendees: 4,
+    priority: 'low',
+    roomId: 'room-003',
+    room: rooms.find((r) => r.id === 'room-003')!,
+    deviceIds: ['device-003'],
+    devices: getDevicesByIds(['device-003']),
+    cateringIds: ['catering-003'],
+    catering: getCateringByIds(['catering-003']),
+    attendees: [
+      createAttendee('user-008', 'confirmed', true, new Date('2026-05-15T09:00:00')),
+      createAttendee('user-006', 'confirmed', false, new Date('2026-05-15T10:00:00')),
+      createAttendee('user-005', 'declined', false, new Date('2026-05-16T11:00:00')),
+      createAttendee('user-007', 'confirmed', false, new Date('2026-05-16T14:30:00')),
+    ],
+    agenda: [
+      { id: 'agenda-030', title: '上月工作总结', duration: 15, presenterId: 'user-008', order: 1 },
+      { id: 'agenda-031', title: '办公环境改善方案', duration: 20, order: 2 },
+      { id: 'agenda-032', title: '季度物资采购计划', duration: 15, order: 3 },
+      { id: 'agenda-033', title: '安全检查与消防演练安排', duration: 10, order: 4 },
+    ],
+    materials: [],
+    decisions: [
+      'B栋休息区增设咖啡机2台',
+      '下月15日进行全员消防演练',
+      '夏季空调温度统一设置为26度',
+    ],
+    status: 'completed',
+    createdAt: new Date('2026-05-12T11:00:00'),
+    createdBy: 'user-008',
+    actualStartTime: setTime(addDays(today, -20), 11, 0),
+    actualEndTime: setTime(addDays(today, -20), 11, 48),
+  },
+  {
+    id: 'meeting-009',
+    title: '技术架构委员会周会',
+    description: '技术架构委员会每周例会，评审技术方案、讨论技术债务、跟踪技术选型。',
+    startTime: setTime(today, 16, 0),
+    endTime: setTime(today, 17, 30),
+    duration: 90,
+    expectedAttendees: 5,
+    priority: 'medium',
+    roomId: 'room-005',
+    room: rooms.find((r) => r.id === 'room-005')!,
+    deviceIds: ['device-002', 'device-003', 'device-005', 'device-008'],
+    devices: getDevicesByIds(['device-002', 'device-003', 'device-005', 'device-008']),
+    cateringIds: ['catering-004', 'catering-005'],
+    catering: getCateringByIds(['catering-004', 'catering-005']),
+    attendees: [
+      createAttendee('user-003', 'confirmed', true, new Date('2026-06-08T10:00:00')),
+      createAttendee('user-007', 'confirmed', false, new Date('2026-06-08T10:30:00')),
+      createAttendee('user-002', 'tentative', false, new Date('2026-06-09T15:00:00')),
+      createAttendee('user-001', 'confirmed', false, new Date('2026-06-10T08:30:00')),
+      createAttendee('user-005', 'confirmed', false, new Date('2026-06-09T09:00:00')),
+    ],
+    agenda: [
+      { id: 'agenda-034', title: '上周技术决策执行跟踪', duration: 20, presenterId: 'user-003', order: 1 },
+      { id: 'agenda-035', title: '微服务拆分方案评审', duration: 35, order: 2 },
+      { id: 'agenda-036', title: '技术债务清理计划', duration: 20, order: 3 },
+      { id: 'agenda-037', title: '新技术选型讨论', duration: 15, order: 4 },
+    ],
+    materials: [sampleMaterials[3]],
+    decisions: [],
+    status: 'in-progress',
+    createdAt: new Date('2026-06-06T14:00:00'),
+    createdBy: 'user-003',
+    actualStartTime: setTime(today, 16, 2),
+  },
+  {
+    id: 'meeting-010',
+    title: '项目评审 - 移动端App重构',
+    description: '移动端App重构项目中期评审，检查进度、质量、风险，调整后续计划。',
+    startTime: setTime(addDays(today, -30), 14, 0),
+    endTime: setTime(addDays(today, -30), 16, 30),
+    duration: 150,
+    expectedAttendees: 6,
+    priority: 'high',
+    roomId: 'room-002',
+    room: rooms.find((r) => r.id === 'room-002')!,
+    deviceIds: ['device-001', 'device-003', 'device-005', 'device-007', 'device-010'],
+    devices: getDevicesByIds(['device-001', 'device-003', 'device-005', 'device-007', 'device-010']),
+    cateringIds: ['catering-001', 'catering-007'],
+    catering: getCateringByIds(['catering-001', 'catering-007']),
+    attendees: [
+      createAttendee('user-003', 'confirmed', true, new Date('2026-05-05T10:00:00')),
+      createAttendee('user-001', 'confirmed', false, new Date('2026-05-05T11:00:00')),
+      createAttendee('user-002', 'confirmed', false, new Date('2026-05-05T14:00:00')),
+      createAttendee('user-004', 'confirmed', false, new Date('2026-05-06T09:00:00')),
+      createAttendee('user-005', 'confirmed', false, new Date('2026-05-06T10:30:00')),
+      createAttendee('user-007', 'confirmed', false, new Date('2026-05-06T15:00:00')),
+    ],
+    agenda: [
+      { id: 'agenda-038', title: '项目进度报告', duration: 30, presenterId: 'user-003', order: 1 },
+      { id: 'agenda-039', title: '已完成功能演示', duration: 35, presenterId: 'user-007', order: 2 },
+      { id: 'agenda-040', title: '质量指标分析', duration: 25, order: 3 },
+      { id: 'agenda-041', title: '风险与问题讨论', duration: 30, order: 4 },
+      { id: 'agenda-042', title: '后续计划调整', duration: 30, order: 5 },
+    ],
+    materials: [sampleMaterials[1], sampleMaterials[3]],
+    decisions: [
+      '项目进度符合预期，完成度约60%',
+      '新增性能优化专项，延期2周交付',
+      '增加2名测试人员投入',
+    ],
+    status: 'completed',
+    createdAt: new Date('2026-05-03T14:00:00'),
+    createdBy: 'user-003',
+    actualStartTime: setTime(addDays(today, -30), 14, 0),
+    actualEndTime: setTime(addDays(today, -30), 16, 20),
+  },
+];
+
+export const meetings = mockMeetings;
+export const defaultMeetings = mockMeetings;
+
+export const getMeetingById = (id: string): Meeting | undefined => {
+  return mockMeetings.find((m) => m.id === id);
+};
+
+export const getMeetingsByStatus = (status: Meeting['status']): Meeting[] => {
+  return mockMeetings.filter((m) => m.status === status);
+};
+
+export const getMeetingsByRoom = (roomId: string): Meeting[] => {
+  return mockMeetings.filter((m) => m.roomId === roomId);
+};
+
+export const getMeetingsByUser = (userId: string): Meeting[] => {
+  return mockMeetings.filter((m) => m.attendees.some((a) => a.userId === userId));
+};
+
+export const getTodayMeetings = (): Meeting[] => {
+  const todayStr = today.toDateString();
+  return mockMeetings.filter((m) => new Date(m.startTime).toDateString() === todayStr);
+};
+
+export const getUpcomingMeetings = (): Meeting[] => {
+  return mockMeetings.filter((m) => new Date(m.startTime) > today && m.status !== 'completed');
+};
