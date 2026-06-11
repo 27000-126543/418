@@ -22,6 +22,24 @@ import { useUserStore } from '@/store/useUserStore';
 import { getRelativeTime } from '@/utils/dateUtils';
 import type { NotificationType } from '@/types';
 
+function NotificationContent({ content }: { content: string }) {
+  const match = content.match(/会前准备还有 (\d+) 项未完成/);
+  if (match) {
+    const [fullMatch, count] = match;
+    const before = content.substring(0, content.indexOf(fullMatch));
+    const after = content.substring(content.indexOf(fullMatch) + fullMatch.length);
+    return (
+      <>
+        {before}
+        <span className="font-bold text-danger-500">{count}</span>
+        {fullMatch.replace(count, '')}
+        {after}
+      </>
+    );
+  }
+  return <>{content}</>;
+}
+
 interface TopbarProps {
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
@@ -171,12 +189,17 @@ export default function Topbar({ sidebarOpen, onToggleSidebar }: TopbarProps) {
                     displayNotifications.map((notification) => {
                       const IconComponent = getNotificationIcon(notification.type);
                       const iconColorClass = getNotificationIconColor(notification.type);
+                      const isChecklistReminder = notification.type === 'reminder' && notification.content.includes('会前准备');
                       return (
                         <div
                           key={notification.id}
                           onClick={() => {
                             markAsRead(notification.id);
-                            navigate(`/meetings/${notification.meetingId}`);
+                            if (isChecklistReminder) {
+                              navigate(`/meetings/${notification.meetingId}`, { state: { scrollToChecklist: true } });
+                            } else {
+                              navigate(`/meetings/${notification.meetingId}`);
+                            }
                             setShowNotifications(false);
                           }}
                           className="cursor-pointer border-b border-neutral-50 px-4 py-3 transition-colors hover:bg-neutral-50"
@@ -201,7 +224,7 @@ export default function Topbar({ sidebarOpen, onToggleSidebar }: TopbarProps) {
                                 </span>
                               </div>
                               <p className="mt-0.5 text-xs text-neutral-500 line-clamp-2">
-                                {notification.content}
+                                <NotificationContent content={notification.content} />
                               </p>
                             </div>
                           </div>

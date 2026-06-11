@@ -10,6 +10,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
   BrainCircuit,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -24,6 +25,7 @@ const navItems: NavItem[] = [
   { to: '/dashboard', label: '仪表盘', icon: LayoutDashboard },
   { to: '/meetings', label: '会议管理', icon: CalendarClock },
   { to: '/meetings/create', label: '发起会议', icon: Video },
+  { to: '/workbench', label: '会前工作台', icon: ClipboardCheck },
   { to: '/notifications', label: '通知中心', icon: Bell },
   { to: '/reports', label: '报表导出', icon: FileBarChart },
   { to: '/statistics', label: '数据统计', icon: BarChart3 },

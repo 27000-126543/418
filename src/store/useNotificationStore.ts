@@ -101,6 +101,7 @@ interface NotificationStoreActions {
   removeNotification: (notificationId: string) => boolean;
   clearAllNotifications: (userId?: string) => void;
   initializeFromMeetings: (meetings: Meeting[]) => void;
+  updateNotificationContent: (notificationId: string, updates: { title?: string; content?: string; actionRequired?: boolean }) => void;
 }
 
 export type NotificationStore = NotificationStoreState &
@@ -266,6 +267,16 @@ export const useNotificationStore = create<NotificationStore>((set, get) => {
         notifications: userId
           ? state.notifications.filter(n => n.userId !== userId)
           : [],
+      }));
+    },
+
+    updateNotificationContent: (notificationId: string, updates: { title?: string; content?: string; actionRequired?: boolean }) => {
+      set(state => ({
+        notifications: state.notifications.map(n =>
+          n.id === notificationId
+            ? { ...n, ...updates }
+            : n
+        ),
       }));
     },
   };

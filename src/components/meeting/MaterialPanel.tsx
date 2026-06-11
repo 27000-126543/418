@@ -35,6 +35,8 @@ interface MaterialPanelProps {
   onSetLatest?: (materialId: string) => void;
   readOnly?: boolean;
   meetingId?: string;
+  isHost?: boolean;
+  currentUserId?: string;
 }
 
 const typeIcons: Record<MaterialType, typeof FileText> = {
@@ -523,12 +525,13 @@ function PreviewModal({ material, allVersions = [], uploader, onClose, onDownloa
 
 interface VersionNoteModalProps {
   fileName: string;
-  onConfirm: (note: string) => void;
+  onConfirm: (note: string, visibility: 'public' | 'host-only') => void;
   onCancel: () => void;
 }
 
 function VersionNoteModal({ fileName, onConfirm, onCancel }: VersionNoteModalProps) {
   const [note, setNote] = useState('');
+  const [visibility, setVisibility] = useState<'public' | 'host-only'>('public');
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -537,7 +540,7 @@ function VersionNoteModal({ fileName, onConfirm, onCancel }: VersionNoteModalPro
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onConfirm(note);
+    onConfirm(note, visibility);
   };
 
   return (
@@ -579,6 +582,35 @@ function VersionNoteModal({ fileName, onConfirm, onCancel }: VersionNoteModalPro
             <p className="text-xs text-neutral-400 mt-2 text-right">
               {note.length}/100
             </p>
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-neutral-700 mb-2">可见范围</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setVisibility('public')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all border',
+                    visibility === 'public'
+                      ? 'bg-success-50 border-success-300 text-success-700'
+                      : 'bg-neutral-50 border-neutral-200 text-neutral-500 hover:bg-neutral-100'
+                  )}
+                >
+                  🌐 公开
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVisibility('host-only')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all border',
+                    visibility === 'host-only'
+                      ? 'bg-warning-50 border-warning-300 text-warning-700'
+                      : 'bg-neutral-50 border-neutral-200 text-neutral-500 hover:bg-neutral-100'
+                  )}
+                >
+                  🔒 仅主持人
+                </button>
+              </div>
+            </div>
           </div>
           <div className="px-6 py-4 bg-neutral-50 border-t border-neutral-100 flex justify-end gap-3">
             <button
@@ -608,20 +640,28 @@ export default function MaterialPanel({
   onRemove,
   onSetLatest,
   readOnly = false,
+  isHost = false,
+  currentUserId,
 }: MaterialPanelProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [pendingFile, setPendingFile] = useState<{ file: File; type: MaterialType; url: string } | null>(null);
+  const [uploadVisibility, setUploadVisibility] = useState<'public' | 'host-only'>('public');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getUploader = (uploaderId: string) =>
     users.find((u) => u.id === uploaderId);
 
+  const visibleMaterials = useMemo(() => {
+    if (isHost) return materials;
+    return materials.filter(m => m.visibility === 'public');
+  }, [materials, isHost]);
+
   const materialGroups = useMemo((): MaterialGroup[] => {
     const groupsMap = new Map<string, Material[]>();
     
-    materials.forEach(m => {
+    visibleMaterials.forEach(m => {
       const existing = groupsMap.get(m.parentId) || [];
       existing.push(m);
       groupsMap.set(m.parentId, existing);
@@ -642,7 +682,7 @@ export default function MaterialPanel({
     });
 
     return groups.sort((a, b) => a.name.localeCompare(b.name));
-  }, [materials]);
+  }, [visibleMaterials]);
 
   const toggleGroup = (parentId: string) => {
     setExpandedGroups(prev => {
@@ -674,26 +714,28 @@ export default function MaterialPanel({
             name: file.name,
             type,
             size: file.size,
-            uploadedBy: users[0]?.id || 'user-001',
+            uploadedBy: currentUserId || users[0]?.id || 'user-001',
             url,
             versionNote: '',
+            visibility: uploadVisibility,
           });
         }
       });
     },
-    [onAdd, users, materials]
+    [onAdd, users, materials, currentUserId, uploadVisibility]
   );
 
-  const handleConfirmVersion = (note: string) => {
+  const handleConfirmVersion = (note: string, visibility: 'public' | 'host-only') => {
     if (!pendingFile || !onAdd) return;
     
     onAdd({
       name: pendingFile.file.name,
       type: pendingFile.type,
       size: pendingFile.file.size,
-      uploadedBy: users[0]?.id || 'user-001',
+      uploadedBy: currentUserId || users[0]?.id || 'user-001',
       url: pendingFile.url,
       versionNote: note,
+      visibility,
     });
     
     setPendingFile(null);
@@ -739,11 +781,17 @@ export default function MaterialPanel({
   };
 
   const handleDownload = (material: Material) => {
+    if (material.visibility === 'host-only' && !isHost) return;
     const link = document.createElement('a');
     link.href = material.url;
     link.download = material.name;
     link.target = '_blank';
     link.click();
+  };
+
+  const handlePreview = (material: Material) => {
+    if (material.visibility === 'host-only' && !isHost) return;
+    setPreviewMaterial(material);
   };
 
   const TypeIcon = ({ type }: { type: MaterialType }) => {
@@ -761,7 +809,7 @@ export default function MaterialPanel({
   };
 
   const latestCount = materialGroups.length;
-  const totalCount = materials.length;
+  const totalCount = visibleMaterials.length;
 
   return (
     <div className="bg-white rounded-2xl shadow-card overflow-hidden border border-neutral-100">
@@ -818,6 +866,33 @@ export default function MaterialPanel({
         <p className="text-neutral-400 text-xs">
           支持 PDF、PPT、Word、Excel、图片格式
         </p>
+        <div className="mt-3 flex items-center justify-center gap-2" onClick={e => e.stopPropagation()}>
+          <span className="text-xs text-neutral-500">可见范围：</span>
+          <button
+            type="button"
+            onClick={() => setUploadVisibility('public')}
+            className={cn(
+              'flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all border',
+              uploadVisibility === 'public'
+                ? 'bg-success-50 border-success-300 text-success-700'
+                : 'bg-neutral-50 border-neutral-200 text-neutral-500 hover:bg-neutral-100'
+            )}
+          >
+            🌐 公开
+          </button>
+          <button
+            type="button"
+            onClick={() => setUploadVisibility('host-only')}
+            className={cn(
+              'flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all border',
+              uploadVisibility === 'host-only'
+                ? 'bg-warning-50 border-warning-300 text-warning-700'
+                : 'bg-neutral-50 border-neutral-200 text-neutral-500 hover:bg-neutral-100'
+            )}
+          >
+            🔒 仅主持人
+          </button>
+        </div>
         </div>
       )}
 
@@ -859,6 +934,15 @@ export default function MaterialPanel({
                             共 {group.versionCount} 个版本
                           </span>
                         )}
+                        {latestVersion.visibility === 'host-only' ? (
+                          <span className="px-2 py-0.5 rounded-md bg-warning-50 text-warning-600 text-xs font-medium">
+                            🔒 仅主持人
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-md bg-success-50 text-success-600 text-xs font-medium">
+                            🌐 公开
+                          </span>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-400">
                         <span>{formatFileSize(latestVersion.size)}</span>
@@ -889,7 +973,7 @@ export default function MaterialPanel({
                     </div>
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => setPreviewMaterial(latestVersion)}
+                        onClick={() => handlePreview(latestVersion)}
                         className="p-2 rounded-lg text-neutral-400 hover:bg-accent-50 hover:text-accent-600 transition-all"
                         title="预览"
                       >
@@ -931,96 +1015,134 @@ export default function MaterialPanel({
                     <div className="border-t border-neutral-100 overflow-hidden transition-all duration-300">
                       {group.versions.filter(v => !v.isLatest).map((version) => {
                         const versionUploader = getUploader(version.uploadedBy);
+                        const latestUploader = getUploader(latestVersion.uploadedBy);
+                        const sizeDiff = ((version.size - latestVersion.size) / 1024).toFixed(1);
+                        const timeDiff = Math.round((latestVersion.uploadedAt.getTime() - version.uploadedAt.getTime()) / (1000 * 60 * 60));
                         return (
-                          <div
-                            key={version.id}
-                            className="group flex items-center gap-4 p-3.5 bg-gradient-to-r from-neutral-50 to-neutral-100/50 border-b border-neutral-100 last:border-b-0 transition-all hover:from-neutral-100 hover:to-neutral-100/70"
-                            style={{
-                              backgroundImage: `repeating-linear-gradient(
-                                45deg,
-                                transparent,
-                                transparent 10px,
-                                rgba(0,0,0,0.015) 10px,
-                                rgba(0,0,0,0.015) 20px
-                              )`,
-                            }}
-                          >
-                            <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-neutral-200/50 opacity-60">
-                              {(() => {
-                                const Icon = typeIcons[version.type];
-                                return <Icon className="w-5 h-5 text-neutral-500" />;
-                              })()}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <p className="text-neutral-600 font-medium text-sm truncate">
-                                  v{version.version}
-                                </p>
-                                <span className="px-2 py-0.5 rounded-full bg-neutral-200 text-neutral-500 text-xs">
-                                  历史版本
-                                </span>
+                          <div key={version.id}>
+                            <div
+                              className="group flex items-center gap-4 p-3.5 bg-gradient-to-r from-neutral-50 to-neutral-100/50 border-b border-neutral-100 transition-all hover:from-neutral-100 hover:to-neutral-100/70"
+                              style={{
+                                backgroundImage: `repeating-linear-gradient(
+                                  45deg,
+                                  transparent,
+                                  transparent 10px,
+                                  rgba(0,0,0,0.015) 10px,
+                                  rgba(0,0,0,0.015) 20px
+                                )`,
+                              }}
+                            >
+                              <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-neutral-200/50 opacity-60">
+                                {(() => {
+                                  const Icon = typeIcons[version.type];
+                                  return <Icon className="w-5 h-5 text-neutral-500" />;
+                                })()}
                               </div>
-                              <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-400">
-                                <span>{formatFileSize(version.size)}</span>
-                                <span>·</span>
-                                <span>{formatDate(version.uploadedAt)}</span>
-                                {versionUploader && (
-                                  <>
-                                    <span>·</span>
-                                    <span className="flex items-center gap-1">
-                                      <img
-                                        src={versionUploader.avatar}
-                                        alt={versionUploader.name}
-                                        className="w-4 h-4 rounded-full object-cover opacity-70"
-                                      />
-                                      {versionUploader.name}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <p className="text-neutral-600 font-medium text-sm truncate">
+                                    v{version.version}
+                                  </p>
+                                  <span className="px-2 py-0.5 rounded-full bg-neutral-200 text-neutral-500 text-xs">
+                                    历史版本
+                                  </span>
+                                  {version.visibility === 'host-only' && (
+                                    <span className="px-2 py-0.5 rounded-md bg-warning-50 text-warning-600 text-xs font-medium">
+                                      🔒
                                     </span>
-                                  </>
+                                  )}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-400">
+                                  <span>{formatFileSize(version.size)}</span>
+                                  <span>·</span>
+                                  <span>{formatDate(version.uploadedAt)}</span>
+                                  {versionUploader && (
+                                    <>
+                                      <span>·</span>
+                                      <span className="flex items-center gap-1">
+                                        <img
+                                          src={versionUploader.avatar}
+                                          alt={versionUploader.name}
+                                          className="w-4 h-4 rounded-full object-cover opacity-70"
+                                        />
+                                        {versionUploader.name}
+                                      </span>
+                                    </>
+                                  )}
+                                  {version.versionNote && (
+                                    <>
+                                      <span>·</span>
+                                      <span className="text-neutral-500 truncate max-w-[200px] italic">
+                                        "{version.versionNote}"
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => handlePreview(version)}
+                                  className="p-2 rounded-lg text-neutral-400 hover:bg-accent-50 hover:text-accent-600 transition-all"
+                                  title="预览此版本"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDownload(version)}
+                                  className="p-2 rounded-lg text-neutral-400 hover:bg-primary-50 hover:text-primary-600 transition-all"
+                                  title="下载此版本"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </button>
+                                {!readOnly && (
+                                  <button
+                                    onClick={() => onSetLatest?.(version.id)}
+                                    className="flex items-center gap-1 px-2.5 py-2 rounded-lg text-neutral-500 hover:bg-accent-50 hover:text-accent-600 transition-all text-xs font-medium"
+                                    title="恢复为最新版本"
+                                  >
+                                    <RotateCcw className="w-4 h-4" />
+                                    <span className="hidden sm:inline">恢复</span>
+                                  </button>
                                 )}
-                                {version.versionNote && (
-                                  <>
-                                    <span>·</span>
-                                    <span className="text-neutral-500 truncate max-w-[200px] italic">
-                                      "{version.versionNote}"
-                                    </span>
-                                  </>
+                                {!readOnly && (
+                                  <button
+                                    onClick={() => onRemove?.(version.id)}
+                                    className="p-2 rounded-lg text-neutral-400 hover:bg-danger-50 hover:text-danger-500 transition-all"
+                                    title="删除此版本"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
                                 )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => setPreviewMaterial(version)}
-                                className="p-2 rounded-lg text-neutral-400 hover:bg-accent-50 hover:text-accent-600 transition-all"
-                                title="预览此版本"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDownload(version)}
-                                className="p-2 rounded-lg text-neutral-400 hover:bg-primary-50 hover:text-primary-600 transition-all"
-                                title="下载此版本"
-                              >
-                                <Download className="w-4 h-4" />
-                              </button>
-                              {!readOnly && (
-                                <button
-                                  onClick={() => onSetLatest?.(version.id)}
-                                  className="flex items-center gap-1 px-2.5 py-2 rounded-lg text-neutral-500 hover:bg-accent-50 hover:text-accent-600 transition-all text-xs font-medium"
-                                  title="恢复为最新版本"
-                                >
-                                  <RotateCcw className="w-4 h-4" />
-                                  <span className="hidden sm:inline">恢复</span>
-                                </button>
-                              )}
-                              {!readOnly && (
-                                <button
-                                  onClick={() => onRemove?.(version.id)}
-                                  className="p-2 rounded-lg text-neutral-400 hover:bg-danger-50 hover:text-danger-500 transition-all"
-                                  title="删除此版本"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              )}
+                            <div className="px-3.5 pb-3 pt-1 bg-neutral-50/50 border-b border-neutral-100 last:border-b-0">
+                              <div className="ml-[60px] p-2.5 rounded-lg bg-white/80 border border-neutral-100 text-xs space-y-1.5">
+                                <div className="flex items-center gap-2 text-neutral-500">
+                                  <span className="w-10 text-neutral-400 flex-shrink-0">大小</span>
+                                  <span>{formatFileSize(latestVersion.size)} → {formatFileSize(version.size)}</span>
+                                  <span className={cn(
+                                    'font-medium',
+                                    version.size > latestVersion.size ? 'text-danger-500' : version.size < latestVersion.size ? 'text-success-500' : 'text-neutral-400'
+                                  )}>
+                                    ({Number(sizeDiff) > 0 ? '+' : ''}{sizeDiff}KB)
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-neutral-500">
+                                  <span className="w-10 text-neutral-400 flex-shrink-0">上传人</span>
+                                  <span>{latestUploader?.name || '未知'} → {versionUploader?.name || '未知'}</span>
+                                  {latestVersion.uploadedBy !== version.uploadedBy && (
+                                    <span className="text-warning-500 font-medium">不同</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 text-neutral-500">
+                                  <span className="w-10 text-neutral-400 flex-shrink-0">说明</span>
+                                  <span className="truncate">{latestVersion.versionNote || '无'} → {version.versionNote || '无'}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-neutral-500">
+                                  <span className="w-10 text-neutral-400 flex-shrink-0">时间差</span>
+                                  <span>{timeDiff > 0 ? `${timeDiff}小时前` : '同时'}</span>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         );

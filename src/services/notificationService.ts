@@ -66,30 +66,75 @@ function buildInvitationContent(params: {
 }
 
 function getUncompletedChecklistCount(meeting: Meeting): number {
+  const details = getUncompletedChecklistDetails(meeting);
+  return details.length;
+}
+
+export function getUncompletedChecklistDetails(meeting: Meeting): { category: string; label: string }[] {
   const checklist = meeting.preMeetingChecklist ?? [];
-  return checklist.filter(item => {
+  const result: { category: string; label: string }[] = [];
+
+  for (const item of checklist) {
+    let isUncompleted = false;
+    let label = item.title;
+
     if (item.autoDetect) {
       switch (item.category) {
         case 'agenda':
-          return meeting.agenda.length === 0;
+          if (meeting.agenda.length === 0) {
+            isUncompleted = true;
+            label = '议程未填写';
+          }
+          break;
         case 'material':
-          return meeting.materials.length === 0;
+          if (meeting.materials.length === 0) {
+            isUncompleted = true;
+            label = '材料未上传';
+          }
+          break;
         case 'attendance': {
           const total = meeting.attendees.length;
-          if (total === 0) return true;
-          const responded = meeting.attendees.filter(a => a.status !== 'pending').length;
-          return responded / total < 0.8;
+          if (total === 0) {
+            isUncompleted = true;
+            label = '参会人未响应';
+          } else {
+            const pendingCount = meeting.attendees.filter(a => a.status === 'pending').length;
+            const responded = meeting.attendees.filter(a => a.status !== 'pending').length;
+            if (responded / total < 0.8) {
+              isUncompleted = true;
+              label = pendingCount > 0 ? `${pendingCount}人未响应邀请` : '参会人响应不足80%';
+            }
+          }
+          break;
         }
         case 'catering':
-          return meeting.catering.length === 0 && meeting.cateringIds.length > 0;
+          if (meeting.catering.length === 0 && meeting.cateringIds.length > 0) {
+            isUncompleted = true;
+            label = '餐饮未确认';
+          }
+          break;
         case 'device':
-          return meeting.devices.length === 0 && meeting.deviceIds.length > 0;
+          if (meeting.devices.length === 0 && meeting.deviceIds.length > 0) {
+            isUncompleted = true;
+            label = '设备未预定';
+          }
+          break;
         default:
-          return false;
+          break;
+      }
+    } else {
+      if (!item.completed) {
+        isUncompleted = true;
+        label = item.title;
       }
     }
-    return !item.completed;
-  }).length;
+
+    if (isUncompleted) {
+      result.push({ category: item.category, label });
+    }
+  }
+
+  return result;
 }
 
 export function createReminder(meeting: Meeting, minutesBefore: number = 15): Notification[] {
@@ -99,6 +144,7 @@ export function createReminder(meeting: Meeting, minutesBefore: number = 15): No
     ? `${meeting.room.name}（${meeting.room.location}）`
     : '待定';
   const uncompletedCount = getUncompletedChecklistCount(meeting);
+  const uncompletedDetails = getUncompletedChecklistDetails(meeting);
 
   for (const attendee of meeting.attendees) {
     if (attendee.status === 'declined') continue;
@@ -111,6 +157,7 @@ export function createReminder(meeting: Meeting, minutesBefore: number = 15): No
       agendaCount: meeting.agenda.length,
       materialCount: meeting.materials.length,
       uncompletedChecklistCount: uncompletedCount,
+      uncompletedDetails,
       isHost: attendee.isHost,
     });
     notifications.push({
@@ -137,6 +184,7 @@ function buildReminderContent(params: {
   agendaCount: number;
   materialCount: number;
   uncompletedChecklistCount: number;
+  uncompletedDetails: { category: string; label: string }[];
   isHost: boolean;
 }): string {
   const lines: string[] = [];
@@ -150,10 +198,32 @@ function buildReminderContent(params: {
     lines.push(`📎 材料：${params.materialCount}份，请提前查看`);
   }
   if (params.uncompletedChecklistCount > 0 && params.isHost) {
-    lines.push(`⚠️ 会前准备：还有 ${params.uncompletedChecklistCount} 项待办未完成，请尽快处理`);
+    lines.push(`⚠️ 会前准备还有 ${params.uncompletedChecklistCount} 项未完成：`);
+    params.uncompletedDetails.forEach(d => {
+      lines.push(`  · ${d.label}`);
+    });
+    lines.push('请尽快处理');
+  } else if (params.uncompletedChecklistCount === 0 && params.isHost) {
+    lines.push('✅ 会前准备已全部完成');
   }
   lines.push('请准时参加！');
   return lines.join('\n');
+}
+
+export function buildReminderContentForMeeting(meeting: Meeting, isHost: boolean): string {
+  const uncompletedCount = getUncompletedChecklistCount(meeting);
+  const uncompletedDetails = getUncompletedChecklistDetails(meeting);
+  return buildReminderContent({
+    title: meeting.title,
+    time: `${formatDateTime(meeting.startTime)} - ${formatDateTime(meeting.endTime)}`,
+    location: meeting.room ? `${meeting.room.name}（${meeting.room.location}）` : '待定',
+    minutesBefore: 15,
+    agendaCount: meeting.agenda.length,
+    materialCount: meeting.materials.length,
+    uncompletedChecklistCount: uncompletedCount,
+    uncompletedDetails,
+    isHost,
+  });
 }
 
 export function createResourceChangeNotification(

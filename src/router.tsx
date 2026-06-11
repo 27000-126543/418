@@ -4,6 +4,7 @@ import Dashboard from '@/pages/Dashboard';
 import MeetingCreate from '@/pages/MeetingCreate';
 import MeetingDetail from '@/pages/MeetingDetail';
 import MeetingList from '@/pages/MeetingList';
+import PreMeetingWorkbench from '@/pages/PreMeetingWorkbench';
 import Notifications from '@/pages/Notifications';
 import Reports from '@/pages/Reports';
 import Statistics from '@/pages/Statistics';
@@ -42,6 +43,10 @@ const router = createBrowserRouter([
             element: <MeetingCreate />,
           },
         ],
+      },
+      {
+        path: 'workbench',
+        element: <PreMeetingWorkbench />,
       },
       {
         path: 'notifications',

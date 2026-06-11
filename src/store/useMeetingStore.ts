@@ -10,12 +10,13 @@ import type {
   Notification,
   ResourceChange,
   PreMeetingChecklistItem,
+  ActionItem,
 } from '@/types';
 import { mockMeetings } from '@/data/meetings';
 import { mockUsers } from '@/data/users';
 import { useResourceStore } from './useResourceStore';
 import { useNotificationStore } from './useNotificationStore';
-import { createMeetingNotifications, createResourceChangeNotification } from '@/services/notificationService';
+import { createMeetingNotifications, createResourceChangeNotification, getUncompletedChecklistDetails, buildReminderContentForMeeting } from '@/services/notificationService';
 
 const generateId = (): string => {
   return 'id_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
@@ -77,6 +78,10 @@ interface MeetingStoreActions {
     item: Omit<PreMeetingChecklistItem, 'id'>
   ) => Meeting | undefined;
   removeChecklistItem: (meetingId: string, itemId: string) => Meeting | undefined;
+  markActualAttendee: (meetingId: string, userId: string, present: boolean) => Meeting | undefined;
+  addActionItem: (meetingId: string, item: Omit<ActionItem, 'id' | 'createdAt'>) => Meeting | undefined;
+  updateActionItem: (meetingId: string, itemId: string, updates: Partial<ActionItem>) => Meeting | undefined;
+  removeActionItem: (meetingId: string, itemId: string) => Meeting | undefined;
 }
 
 export type MeetingStore = MeetingStoreState & MeetingStoreActions;
@@ -367,6 +372,9 @@ export const useMeetingStore = create<MeetingStore>((set, get) => ({
           parentId = newId;
         }
 
+        const existingLatest = sameNameMaterials.find(m => m.isLatest);
+        const visibility = material.visibility ?? existingLatest?.visibility ?? 'public';
+
         const newMaterial: Material = {
           ...material,
           id: newId,
@@ -374,6 +382,7 @@ export const useMeetingStore = create<MeetingStore>((set, get) => ({
           version,
           parentId,
           isLatest,
+          visibility,
         };
 
         const updatedMaterials = existingMaterials.map(m => {
@@ -626,16 +635,38 @@ export const useMeetingStore = create<MeetingStore>((set, get) => ({
   },
 
   startMeeting: (meetingId: string) => {
+    const meeting = get().getMeetingById(meetingId);
+    if (!meeting) return undefined;
+
+    const actualAttendees = meeting.attendees
+      .filter(a => a.status === 'confirmed')
+      .map(a => a.userId);
+
     return get().updateMeeting(meetingId, {
       status: 'in-progress',
       actualStartTime: new Date(),
+      actualAttendees,
     });
   },
 
   endMeeting: (meetingId: string) => {
+    const meeting = get().getMeetingById(meetingId);
+    if (!meeting) return undefined;
+
+    const now = new Date();
+    const updatedActionItems = (meeting.actionItems ?? []).map(item => {
+      if (item.status === 'completed') return item;
+      const isOverdue = new Date(item.dueDate) < now;
+      return {
+        ...item,
+        status: isOverdue ? 'overdue' as const : item.status === 'in_progress' ? 'in_progress' as const : 'pending' as const,
+      };
+    });
+
     return get().updateMeeting(meetingId, {
       status: 'completed',
-      actualEndTime: new Date(),
+      actualEndTime: now,
+      actionItems: updatedActionItems,
     });
   },
 
@@ -670,6 +701,27 @@ export const useMeetingStore = create<MeetingStore>((set, get) => ({
       });
       return { meetings };
     });
+
+    if (updated) {
+      const notificationStore = useNotificationStore.getState();
+      const reminderNotifications = notificationStore.notifications.filter(
+        n => n.meetingId === meetingId && n.type === 'reminder'
+      );
+
+      const uncompletedDetails = getUncompletedChecklistDetails(updated);
+      const uncompletedCount = uncompletedDetails.length;
+
+      for (const reminder of reminderNotifications) {
+        const hostAttendee = updated.attendees.find(a => a.userId === reminder.userId);
+        const isHost = hostAttendee?.isHost ?? false;
+        const newContent = buildReminderContentForMeeting(updated, isHost);
+
+        notificationStore.updateNotificationContent(reminder.id, {
+          content: newContent,
+          actionRequired: uncompletedCount > 0 && isHost,
+        });
+      }
+    }
 
     return updated;
   },
@@ -707,6 +759,95 @@ export const useMeetingStore = create<MeetingStore>((set, get) => ({
 
         const checklist = meeting.preMeetingChecklist?.filter(item => item.id !== itemId) ?? [];
         updated = { ...meeting, preMeetingChecklist: checklist };
+        return updated;
+      });
+      return { meetings };
+    });
+
+    return updated;
+  },
+
+  markActualAttendee: (meetingId: string, userId: string, present: boolean) => {
+    let updated: Meeting | undefined;
+
+    set(state => {
+      const meetings = state.meetings.map(meeting => {
+        if (meeting.id !== meetingId) return meeting;
+
+        const actualAttendees = present
+          ? [...new Set([...(meeting.actualAttendees ?? []), userId])]
+          : (meeting.actualAttendees ?? []).filter(id => id !== userId);
+
+        updated = { ...meeting, actualAttendees };
+        return updated;
+      });
+      return { meetings };
+    });
+
+    return updated;
+  },
+
+  addActionItem: (meetingId: string, item: Omit<ActionItem, 'id' | 'createdAt'>) => {
+    let updated: Meeting | undefined;
+
+    set(state => {
+      const meetings = state.meetings.map(meeting => {
+        if (meeting.id !== meetingId) return meeting;
+
+        const newItem: ActionItem = {
+          ...item,
+          id: generateId(),
+          createdAt: new Date(),
+        };
+
+        updated = {
+          ...meeting,
+          actionItems: [...(meeting.actionItems ?? []), newItem],
+        };
+        return updated;
+      });
+      return { meetings };
+    });
+
+    return updated;
+  },
+
+  updateActionItem: (meetingId: string, itemId: string, updates: Partial<ActionItem>) => {
+    let updated: Meeting | undefined;
+
+    set(state => {
+      const meetings = state.meetings.map(meeting => {
+        if (meeting.id !== meetingId) return meeting;
+
+        const actionItems = (meeting.actionItems ?? []).map(item => {
+          if (item.id !== itemId) return item;
+          return {
+            ...item,
+            ...updates,
+            completedAt: updates.status === 'completed' ? new Date() : item.completedAt,
+          };
+        });
+
+        updated = { ...meeting, actionItems };
+        return updated;
+      });
+      return { meetings };
+    });
+
+    return updated;
+  },
+
+  removeActionItem: (meetingId: string, itemId: string) => {
+    let updated: Meeting | undefined;
+
+    set(state => {
+      const meetings = state.meetings.map(meeting => {
+        if (meeting.id !== meetingId) return meeting;
+
+        updated = {
+          ...meeting,
+          actionItems: (meeting.actionItems ?? []).filter(item => item.id !== itemId),
+        };
         return updated;
       });
       return { meetings };

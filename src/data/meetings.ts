@@ -115,6 +115,7 @@ const sampleMaterials: Material[] = [
     parentId: 'mat-001',
     isLatest: false,
     versionNote: '初始版本',
+    visibility: 'host-only',
   },
   {
     id: 'mat-001-v2',
@@ -128,6 +129,7 @@ const sampleMaterials: Material[] = [
     parentId: 'mat-001',
     isLatest: true,
     versionNote: '更新了华东区域销售数据',
+    visibility: 'host-only',
   },
   {
     id: 'mat-002',
@@ -140,6 +142,7 @@ const sampleMaterials: Material[] = [
     version: 1,
     parentId: 'mat-002',
     isLatest: true,
+    visibility: 'public',
   },
   {
     id: 'mat-003-v1',
@@ -153,6 +156,7 @@ const sampleMaterials: Material[] = [
     parentId: 'mat-003',
     isLatest: false,
     versionNote: '初稿',
+    visibility: 'public',
   },
   {
     id: 'mat-003-v2',
@@ -166,6 +170,7 @@ const sampleMaterials: Material[] = [
     parentId: 'mat-003',
     isLatest: true,
     versionNote: '补充了竞品分析章节',
+    visibility: 'public',
   },
   {
     id: 'mat-004',
@@ -178,6 +183,7 @@ const sampleMaterials: Material[] = [
     version: 1,
     parentId: 'mat-004',
     isLatest: true,
+    visibility: 'public',
   },
   {
     id: 'mat-005-v1',
@@ -190,6 +196,7 @@ const sampleMaterials: Material[] = [
     version: 1,
     parentId: 'mat-005',
     isLatest: false,
+    visibility: 'host-only',
   },
   {
     id: 'mat-005-v2',
@@ -203,6 +210,7 @@ const sampleMaterials: Material[] = [
     parentId: 'mat-005',
     isLatest: false,
     versionNote: '调整了研发部门预算',
+    visibility: 'host-only',
   },
   {
     id: 'mat-005-v3',
@@ -216,6 +224,7 @@ const sampleMaterials: Material[] = [
     parentId: 'mat-005',
     isLatest: true,
     versionNote: '最终版，增加了市场拓展费用',
+    visibility: 'host-only',
   },
 ];
 

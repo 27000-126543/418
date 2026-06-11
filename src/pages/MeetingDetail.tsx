@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useMeetingStore } from '@/store/useMeetingStore';
 import { useResourceStore } from '@/store/useResourceStore';
 import { useUserStore } from '@/store/useUserStore';
@@ -9,6 +9,7 @@ import MaterialPanel from '@/components/meeting/MaterialPanel';
 import AttendanceGrid from '@/components/meeting/AttendanceGrid';
 import ResourceAdjuster from '@/components/meeting/ResourceAdjuster';
 import PreMeetingChecklist from '@/components/meeting/PreMeetingChecklist';
+import MeetingExecutionPanel from '@/components/meeting/MeetingExecutionPanel';
 import { AlertTriangle } from 'lucide-react';
 import {
   Clock,
@@ -30,11 +31,13 @@ import {
 } from 'lucide-react';
 import type { MeetingStatus, AttendanceStatus } from '@/types';
 
-type TabType = 'overview' | 'agenda' | 'attendance' | 'resources';
+type TabType = 'overview' | 'agenda' | 'attendance' | 'resources' | 'execution';
 
 export default function MeetingDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const checklistRef = useRef<HTMLDivElement>(null);
   const {
     getMeetingById,
     updateMeetingStatus,
@@ -49,6 +52,12 @@ export default function MeetingDetail() {
     addMaterial,
     removeMaterial,
     setMaterialLatestVersion,
+    startMeeting,
+    endMeeting,
+    markActualAttendee,
+    addActionItem,
+    updateActionItem,
+    removeActionItem,
   } = useMeetingStore();
   const { rooms, devices, cateringOptions } = useResourceStore();
   const { users, currentUser } = useUserStore();
@@ -58,6 +67,16 @@ export default function MeetingDetail() {
   const [showDecisionInput, setShowDecisionInput] = useState(false);
 
   const meeting = id ? getMeetingById(id) : undefined;
+
+  useEffect(() => {
+    const state = location.state as { scrollToChecklist?: boolean } | null;
+    if (state?.scrollToChecklist && checklistRef.current) {
+      setActiveTab('overview');
+      setTimeout(() => {
+        checklistRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [location.state]);
 
   const isHost = currentUser
     ? meeting?.attendees.some(a => a.userId === currentUser.id && a.isHost) ?? false
@@ -145,6 +164,9 @@ export default function MeetingDetail() {
     { id: 'agenda', label: '议程材料', icon: FileText },
     { id: 'attendance', label: '出席情况', icon: UserCheck },
     { id: 'resources', label: '资源配置', icon: Settings2 },
+    ...(meeting.status === 'in-progress' || meeting.status === 'completed'
+      ? [{ id: 'execution' as TabType, label: '执行面板', icon: Play }]
+      : []),
   ];
 
   const handleStatusChange = (status: MeetingStatus) => {
@@ -334,21 +356,41 @@ export default function MeetingDetail() {
       </div>
 
       <div className="p-1 rounded-2xl bg-white border border-neutral-100 shadow-card">
-        <div className="flex p-1 gap-1 bg-neutral-50 rounded-xl mb-0">
-          {tabs.map(tab => (
+        <div className="flex p-1 gap-1 bg-neutral-50 rounded-xl mb-0 items-center">
+          <div className="flex-1 flex">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+                  activeTab === tab.id
+                    ? 'bg-white text-primary-600 shadow-sm'
+                    : 'text-neutral-500 hover:text-neutral-700'
+                }`}
+              >
+                <tab.icon className="w-3.5 h-3.5" />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          {isHost && meeting.status === 'in-progress' && (
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all ${
-                activeTab === tab.id
-                  ? 'bg-white text-primary-600 shadow-sm'
-                  : 'text-neutral-500 hover:text-neutral-700'
-              }`}
+              onClick={() => endMeeting(meeting.id)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-success-500 text-white text-xs font-semibold hover:bg-success-600 transition-colors shadow-sm ml-2 shrink-0"
             >
-              <tab.icon className="w-3.5 h-3.5" />
-              {tab.label}
+              <Square className="w-3.5 h-3.5" />
+              结束会议
             </button>
-          ))}
+          )}
+          {isHost && meeting.status === 'scheduled' && (
+            <button
+              onClick={() => startMeeting(meeting.id)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-accent-500 text-white text-xs font-semibold hover:bg-accent-600 transition-colors shadow-sm ml-2 shrink-0"
+            >
+              <Play className="w-3.5 h-3.5" />
+              开始会议
+            </button>
+          )}
         </div>
       </div>
 
@@ -356,13 +398,15 @@ export default function MeetingDetail() {
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-              <PreMeetingChecklist
-                meeting={meeting}
-                onToggleItem={handleToggleChecklistItem}
-                onAddItem={handleAddChecklistItem}
-                onRemoveItem={handleRemoveChecklistItem}
-                isHost={isHost}
-              />
+              <div ref={checklistRef}>
+                <PreMeetingChecklist
+                  meeting={meeting}
+                  onToggleItem={handleToggleChecklistItem}
+                  onAddItem={handleAddChecklistItem}
+                  onRemoveItem={handleRemoveChecklistItem}
+                  isHost={isHost}
+                />
+              </div>
 
               <div className="p-6 rounded-2xl bg-white border border-neutral-100 shadow-card">
                 <h3 className="text-sm font-bold text-neutral-800 mb-4 flex items-center gap-2">
@@ -586,6 +630,8 @@ export default function MeetingDetail() {
                 onRemove={materialId => removeMaterial(meeting.id, materialId)}
                 onSetLatest={materialId => setMaterialLatestVersion(meeting.id, materialId)}
                 readOnly={false}
+                isHost={isHost}
+                currentUserId={currentUser?.id}
               />
             </div>
           </div>
@@ -611,6 +657,21 @@ export default function MeetingDetail() {
             availableCatering={cateringOptions}
             expectedAttendees={meeting.expectedAttendees}
             onSave={handleResourceSave}
+          />
+        )}
+
+        {activeTab === 'execution' && (
+          <MeetingExecutionPanel
+            meeting={meeting}
+            isHost={isHost}
+            onStartMeeting={() => startMeeting(meeting.id)}
+            onEndMeeting={() => endMeeting(meeting.id)}
+            onMarkAttendee={(userId, present) => markActualAttendee(meeting.id, userId, present)}
+            onAddActionItem={(item) => addActionItem(meeting.id, item)}
+            onUpdateActionItem={(itemId, updates) => updateActionItem(meeting.id, itemId, updates)}
+            onRemoveActionItem={(itemId) => removeActionItem(meeting.id, itemId)}
+            onAddDecision={(decision) => addDecision(meeting.id, decision)}
+            onUpdateAttendanceStatus={(userId, status) => updateAttendanceStatus(meeting.id, userId, status)}
           />
         )}
       </div>

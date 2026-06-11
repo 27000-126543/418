@@ -89,6 +89,19 @@ export interface Material {
   parentId: string;
   isLatest: boolean;
   versionNote?: string;
+  visibility: 'public' | 'host-only';
+}
+
+export interface ActionItem {
+  id: string;
+  title: string;
+  description: string;
+  assigneeId: string;
+  assigneeName: string;
+  dueDate: Date;
+  status: 'pending' | 'in_progress' | 'completed' | 'overdue';
+  createdAt: Date;
+  completedAt?: Date;
 }
 
 export type MeetingStatus = 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
@@ -120,6 +133,8 @@ export interface Meeting {
   actualStartTime?: Date;
   actualEndTime?: Date;
   preMeetingChecklist?: PreMeetingChecklistItem[];
+  actionItems?: ActionItem[];
+  actualAttendees?: string[];
 }
 
 export type ConflictReason =
