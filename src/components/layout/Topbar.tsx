@@ -14,6 +14,7 @@ import {
   RefreshCw,
   ClipboardList,
   ChevronRight,
+  CheckCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNotificationStore } from '@/store/useNotificationStore';
@@ -82,15 +83,6 @@ export default function Topbar({ sidebarOpen, onToggleSidebar }: TopbarProps) {
     : [];
   const unreadCount = unreadNotifications.length;
   const displayNotifications = userNotifications.slice(0, 8);
-
-  useEffect(() => {
-    if (showNotifications && currentUser && unreadCount > 0) {
-      const timer = setTimeout(() => {
-        markAllAsRead(currentUser.id);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [showNotifications, currentUser, unreadCount, markAllAsRead]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -219,6 +211,19 @@ export default function Topbar({ sidebarOpen, onToggleSidebar }: TopbarProps) {
                   )}
                 </div>
                 <div className="border-t border-neutral-100 px-4 py-2">
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={() => {
+                        if (currentUser) {
+                          markAllAsRead(currentUser.id);
+                        }
+                      }}
+                      className="flex w-full items-center justify-center gap-1 py-2 text-xs font-medium text-accent-600 transition-colors hover:text-accent-700"
+                    >
+                      <CheckCheck className="h-3.5 w-3.5" />
+                      全部标为已读
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       navigate('/notifications');

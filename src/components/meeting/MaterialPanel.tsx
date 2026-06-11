@@ -458,17 +458,14 @@ export default function MaterialPanel({
       const fileArray = Array.from(files);
       fileArray.forEach((file) => {
         const type = getTypeFromFilename(file.name);
-        const mockUrl =
-          type === 'image'
-            ? URL.createObjectURL(file)
-            : `https://example.com/files/${file.name}`;
+        const url = URL.createObjectURL(file);
 
         onAdd({
           name: file.name,
           type,
           size: file.size,
           uploadedBy: users[0]?.id || 'user-001',
-          url: mockUrl,
+          url,
         });
       });
     },

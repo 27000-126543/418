@@ -117,6 +117,13 @@ export interface Meeting {
   actualEndTime?: Date;
 }
 
+export type ConflictReason =
+  | 'time-overlap'
+  | 'device-incompatible'
+  | 'device-faulty'
+  | 'device-maintenance'
+  | 'room-unavailable';
+
 export interface ResourceConflict {
   type: 'room' | 'device' | 'time';
   resourceId: string;
@@ -125,6 +132,8 @@ export interface ResourceConflict {
   conflictingMeetingTitle?: string;
   startTime: Date;
   endTime: Date;
+  reason?: ConflictReason;
+  description?: string;
 }
 
 export interface AlternativeSuggestion {

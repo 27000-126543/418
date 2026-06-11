@@ -22,6 +22,8 @@ export function detectRoomConflict(
         conflictingMeetingTitle: meeting.title,
         startTime: meeting.startTime,
         endTime: meeting.endTime,
+        reason: 'time-overlap',
+        description: '会议室时间冲突',
       });
     }
   }
@@ -52,10 +54,64 @@ export function detectDeviceConflict(
           conflictingMeetingTitle: meeting.title,
           startTime: meeting.startTime,
           endTime: meeting.endTime,
+          reason: 'time-overlap',
+          description: '设备时间冲突',
         });
       }
     }
   }
+  return conflicts;
+}
+
+export function detectDeviceCompatibilityConflict(
+  roomId: string,
+  deviceIds: string[],
+  devices: Device[]
+): ResourceConflict[] {
+  const conflicts: ResourceConflict[] = [];
+  const now = new Date();
+
+  for (const deviceId of deviceIds) {
+    const device = devices.find((d) => d.id === deviceId);
+    if (!device) continue;
+
+    if (!device.compatibleRooms.includes(roomId)) {
+      conflicts.push({
+        type: 'device',
+        resourceId: deviceId,
+        resourceName: device.name,
+        startTime: now,
+        endTime: now,
+        reason: 'device-incompatible',
+        description: `${device.name} 不兼容当前会议室`,
+      });
+    }
+
+    if (device.status === 'faulty') {
+      conflicts.push({
+        type: 'device',
+        resourceId: deviceId,
+        resourceName: device.name,
+        startTime: now,
+        endTime: now,
+        reason: 'device-faulty',
+        description: `${device.name} 设备故障，暂时无法使用`,
+      });
+    }
+
+    if (device.status === 'maintenance') {
+      conflicts.push({
+        type: 'device',
+        resourceId: deviceId,
+        resourceName: device.name,
+        startTime: now,
+        endTime: now,
+        reason: 'device-maintenance',
+        description: `${device.name} 设备维护中，暂时无法使用`,
+      });
+    }
+  }
+
   return conflicts;
 }
 
