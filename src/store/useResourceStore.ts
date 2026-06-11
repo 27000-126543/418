@@ -104,7 +104,7 @@ export const useResourceStore = create<ResourceStore>((set, get) => ({
     if (!room) return [];
 
     return get().devices.filter(device => {
-      if (device.status === 'faulty' || device.status === 'maintenance') return false;
+      if (device.status === 'faulty' || device.status === 'maintenance' || device.status === 'in-use') return false;
       if (!device.compatibleRooms.includes(roomId)) return false;
 
       const conflictingMeeting = meetings.find(meeting => {

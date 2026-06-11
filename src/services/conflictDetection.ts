@@ -41,6 +41,44 @@ export function detectDeviceConflict(
   const conflicts: ResourceConflict[] = [];
   for (const deviceId of deviceIds) {
     const device = devices.find((d) => d.id === deviceId);
+    if (device) {
+      if (device.status === 'in-use') {
+        conflicts.push({
+          type: 'device',
+          resourceId: deviceId,
+          resourceName: device.name,
+          startTime: startTime,
+          endTime: endTime,
+          reason: 'device-in-use',
+          description: `${device.name} 设备正在使用中，暂时无法使用`,
+        });
+        continue;
+      }
+      if (device.status === 'faulty') {
+        conflicts.push({
+          type: 'device',
+          resourceId: deviceId,
+          resourceName: device.name,
+          startTime: startTime,
+          endTime: endTime,
+          reason: 'device-faulty',
+          description: `${device.name} 设备故障，暂时无法使用`,
+        });
+        continue;
+      }
+      if (device.status === 'maintenance') {
+        conflicts.push({
+          type: 'device',
+          resourceId: deviceId,
+          resourceName: device.name,
+          startTime: startTime,
+          endTime: endTime,
+          reason: 'device-maintenance',
+          description: `${device.name} 设备维护中，暂时无法使用`,
+        });
+        continue;
+      }
+    }
     const filteredMeetings = existingMeetings.filter(
       (m) => m.deviceIds.includes(deviceId) && m.id !== excludeMeetingId && m.status !== 'cancelled'
     );
@@ -108,6 +146,18 @@ export function detectDeviceCompatibilityConflict(
         endTime: now,
         reason: 'device-maintenance',
         description: `${device.name} 设备维护中，暂时无法使用`,
+      });
+    }
+
+    if (device.status === 'in-use') {
+      conflicts.push({
+        type: 'device',
+        resourceId: deviceId,
+        resourceName: device.name,
+        startTime: now,
+        endTime: now,
+        reason: 'device-in-use',
+        description: `${device.name} 设备正在使用中，暂时无法使用`,
       });
     }
   }

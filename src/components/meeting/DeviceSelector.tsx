@@ -62,6 +62,9 @@ interface DeviceSelectorProps {
   selectedIds?: string[];
   onChange?: (ids: string[]) => void;
   className?: string;
+  startTime?: Date;
+  endTime?: Date;
+  excludeMeetingId?: string;
 }
 
 export default function DeviceSelector({
@@ -69,36 +72,71 @@ export default function DeviceSelector({
   selectedIds = [],
   onChange,
   className,
+  startTime,
+  endTime,
+  excludeMeetingId,
 }: DeviceSelectorProps) {
-  const { devices } = useResourceStore();
+  const { devices, getAvailableDevices } = useResourceStore();
   const [activeType, setActiveType] = useState<DeviceType | 'all'>('all');
 
   const deviceTypes: Array<DeviceType> = ['projector', 'whiteboard', 'video-conferencing', 'speaker', 'microphone'];
 
-  const compatibleDevices = useMemo(() => {
-    let result = devices;
+  const availableDeviceIds = useMemo(() => {
+    if (!roomId || !startTime || !endTime) return new Set<string>();
+    const availableDevices = getAvailableDevices(roomId, startTime, endTime, excludeMeetingId);
+    return new Set(availableDevices.map((d) => d.id));
+  }, [roomId, startTime, endTime, excludeMeetingId, getAvailableDevices]);
+
+  const { compatibleDevices, unavailableCount } = useMemo(() => {
+    let allCompatible = devices;
 
     if (roomId) {
-      result = result.filter((d) => d.compatibleRooms.includes(roomId));
+      allCompatible = allCompatible.filter((d) => d.compatibleRooms.includes(roomId));
     }
 
-    if (activeType !== 'all') {
-      result = result.filter((d) => d.type === activeType);
-    }
+    const filtered = allCompatible.filter((d) => {
+      if (d.status === 'in-use') return false;
+      if (d.status === 'faulty') return false;
+      if (d.status === 'maintenance') return false;
+      if (activeType !== 'all' && d.type !== activeType) return false;
+      if (startTime && endTime && roomId && !availableDeviceIds.has(d.id)) return false;
+      return true;
+    });
 
-    return result;
-  }, [devices, roomId, activeType]);
+    const typeFilteredAll = allCompatible.filter((d) => {
+      if (d.status === 'in-use') return false;
+      if (d.status === 'faulty') return false;
+      if (d.status === 'maintenance') return false;
+      if (startTime && endTime && roomId && !availableDeviceIds.has(d.id)) return false;
+      return true;
+    });
+
+    const unavailable = allCompatible.length - typeFilteredAll.length;
+
+    return { compatibleDevices: filtered, unavailableCount: unavailable };
+  }, [devices, roomId, activeType, startTime, endTime, roomId, availableDeviceIds]);
 
   const typeCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: roomId ? compatibleDevices.length : devices.length };
+    const countFiltered = (d: Device) => {
+      if (roomId && !d.compatibleRooms.includes(roomId)) return false;
+      if (d.status === 'in-use') return false;
+      if (d.status === 'faulty') return false;
+      if (d.status === 'maintenance') return false;
+      if (startTime && endTime && roomId && !availableDeviceIds.has(d.id)) return false;
+      return true;
+    };
+
+    const allCount = devices.filter(countFiltered).length;
+    const counts: Record<string, number> = { all: allCount };
+
     deviceTypes.forEach((type) => {
       counts[type] = devices.filter((d) => {
-        if (roomId && !d.compatibleRooms.includes(roomId)) return false;
+        if (!countFiltered(d)) return false;
         return d.type === type;
       }).length;
     });
     return counts;
-  }, [devices, roomId, deviceTypes, compatibleDevices]);
+  }, [devices, roomId, deviceTypes, startTime, endTime, availableDeviceIds]);
 
   const handleToggle = (deviceId: string) => {
     if (!onChange) return;
@@ -252,6 +290,17 @@ export default function DeviceSelector({
           <p className="text-neutral-400">
             {roomId ? '当前会议室暂无兼容设备' : '没有找到符合条件的设备'}
           </p>
+        </div>
+      )}
+
+      {unavailableCount > 0 && (
+        <div className="mt-4 pt-4 border-t border-neutral-100">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-warning-50 text-warning-600">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span className="text-xs">
+              当前时段有 {unavailableCount} 台设备因占用/故障不可用
+            </span>
+          </div>
         </div>
       )}
     </div>

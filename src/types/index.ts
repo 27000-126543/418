@@ -85,6 +85,10 @@ export interface Material {
   uploadedBy: string;
   uploadedAt: Date;
   url: string;
+  version: number;
+  parentId: string;
+  isLatest: boolean;
+  versionNote?: string;
 }
 
 export type MeetingStatus = 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
@@ -115,6 +119,7 @@ export interface Meeting {
   createdBy: string;
   actualStartTime?: Date;
   actualEndTime?: Date;
+  preMeetingChecklist?: PreMeetingChecklistItem[];
 }
 
 export type ConflictReason =
@@ -122,6 +127,7 @@ export type ConflictReason =
   | 'device-incompatible'
   | 'device-faulty'
   | 'device-maintenance'
+  | 'device-in-use'
   | 'room-unavailable';
 
 export interface ResourceConflict {
@@ -260,11 +266,22 @@ export interface ResourceChange {
   description: string;
 }
 
-export interface ScheduleResult {
+export interface PreMeetingChecklistItem {
+  id: string;
+  category: 'agenda' | 'material' | 'attendance' | 'catering' | 'device';
+  title: string;
+  description: string;
+  completed: boolean;
+  completedAt?: Date;
+  completedBy?: string;
+  autoDetect: boolean;
+}
+
+export type ScheduleResult = {
   success: boolean;
   meeting?: Meeting;
   conflicts: ResourceConflict[];
   suggestions: AlternativeSuggestion[];
   warnings?: string[];
   message?: string;
-}
+};

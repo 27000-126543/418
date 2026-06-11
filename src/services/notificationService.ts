@@ -1,4 +1,4 @@
-import type { Meeting, Notification, ResourceChange, Attendee } from '@/types';
+import type { Meeting, Notification, ResourceChange } from '@/types';
 import { generateId, formatDateTime, formatDuration } from '@/utils/dateUtils';
 
 export function createMeetingNotifications(meeting: Meeting): Notification[] {
@@ -65,12 +65,41 @@ function buildInvitationContent(params: {
   return lines.join('\n');
 }
 
+function getUncompletedChecklistCount(meeting: Meeting): number {
+  const checklist = meeting.preMeetingChecklist ?? [];
+  return checklist.filter(item => {
+    if (item.autoDetect) {
+      switch (item.category) {
+        case 'agenda':
+          return meeting.agenda.length === 0;
+        case 'material':
+          return meeting.materials.length === 0;
+        case 'attendance': {
+          const total = meeting.attendees.length;
+          if (total === 0) return true;
+          const responded = meeting.attendees.filter(a => a.status !== 'pending').length;
+          return responded / total < 0.8;
+        }
+        case 'catering':
+          return meeting.catering.length === 0 && meeting.cateringIds.length > 0;
+        case 'device':
+          return meeting.devices.length === 0 && meeting.deviceIds.length > 0;
+        default:
+          return false;
+      }
+    }
+    return !item.completed;
+  }).length;
+}
+
 export function createReminder(meeting: Meeting, minutesBefore: number = 15): Notification[] {
   const notifications: Notification[] = [];
   const timeInfo = `${formatDateTime(meeting.startTime)} - ${formatDateTime(meeting.endTime)}`;
   const locationInfo = meeting.room
     ? `${meeting.room.name}（${meeting.room.location}）`
     : '待定';
+  const uncompletedCount = getUncompletedChecklistCount(meeting);
+
   for (const attendee of meeting.attendees) {
     if (attendee.status === 'declined') continue;
     const title = `会议即将开始：${meeting.title}`;
@@ -81,6 +110,8 @@ export function createReminder(meeting: Meeting, minutesBefore: number = 15): No
       minutesBefore,
       agendaCount: meeting.agenda.length,
       materialCount: meeting.materials.length,
+      uncompletedChecklistCount: uncompletedCount,
+      isHost: attendee.isHost,
     });
     notifications.push({
       id: generateId(),
@@ -92,7 +123,7 @@ export function createReminder(meeting: Meeting, minutesBefore: number = 15): No
       content,
       createdAt: new Date(),
       read: false,
-      actionRequired: false,
+      actionRequired: uncompletedCount > 0 && attendee.isHost,
     });
   }
   return notifications;
@@ -105,6 +136,8 @@ function buildReminderContent(params: {
   minutesBefore: number;
   agendaCount: number;
   materialCount: number;
+  uncompletedChecklistCount: number;
+  isHost: boolean;
 }): string {
   const lines: string[] = [];
   lines.push(`⏰ 提醒：会议将在 ${params.minutesBefore} 分钟后开始`);
@@ -115,6 +148,9 @@ function buildReminderContent(params: {
   }
   if (params.materialCount > 0) {
     lines.push(`📎 材料：${params.materialCount}份，请提前查看`);
+  }
+  if (params.uncompletedChecklistCount > 0 && params.isHost) {
+    lines.push(`⚠️ 会前准备：还有 ${params.uncompletedChecklistCount} 项待办未完成，请尽快处理`);
   }
   lines.push('请准时参加！');
   return lines.join('\n');

@@ -1,8 +1,12 @@
-import type { Meeting, Attendee, AgendaItem, Material } from '@/types';
+import type { Meeting, Attendee, Material, PreMeetingChecklistItem } from '@/types';
 import { users } from '@/data/users';
 import { rooms } from '@/data/rooms';
-import { devices, getDevicesByIds } from '@/data/devices';
-import { cateringOptions, getCateringByIds } from '@/data/catering';
+import { getDevicesByIds } from '@/data/devices';
+import { getCateringByIds } from '@/data/catering';
+
+const generateId = (): string => {
+  return 'id_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
+};
 
 const createAttendee = (userId: string, status: Attendee['status'], isHost: boolean, respondedAt?: Date): Attendee => {
   const user = users.find((u) => u.id === userId)!;
@@ -13,6 +17,75 @@ const createAttendee = (userId: string, status: Attendee['status'], isHost: bool
     respondedAt,
     isHost,
   };
+};
+
+const createPreMeetingChecklist = (
+  meeting: Partial<Meeting>,
+  createdBy: string
+): PreMeetingChecklistItem[] => {
+  const agenda = meeting.agenda ?? [];
+  const materials = meeting.materials ?? [];
+  const attendees = meeting.attendees ?? [];
+  const cateringIds = meeting.cateringIds ?? [];
+  const deviceIds = meeting.deviceIds ?? [];
+  const catering = meeting.catering ?? [];
+  const devices = meeting.devices ?? [];
+
+  const attendanceResponded = attendees.filter(a => a.status !== 'pending').length;
+  const attendanceRate = attendees.length > 0 ? attendanceResponded / attendees.length : 0;
+
+  return [
+    {
+      id: generateId(),
+      category: 'agenda',
+      title: '议程已填写',
+      description: '确认会议议程是否已完整填写',
+      completed: agenda.length > 0,
+      completedAt: agenda.length > 0 ? new Date() : undefined,
+      completedBy: agenda.length > 0 ? createdBy : undefined,
+      autoDetect: true,
+    },
+    {
+      id: generateId(),
+      category: 'material',
+      title: '材料已上传',
+      description: '确认会议所需材料是否已上传',
+      completed: materials.length > 0,
+      completedAt: materials.length > 0 ? new Date() : undefined,
+      completedBy: materials.length > 0 ? createdBy : undefined,
+      autoDetect: true,
+    },
+    {
+      id: generateId(),
+      category: 'attendance',
+      title: '参会人已响应',
+      description: '确认80%以上参会人已确认出席',
+      completed: attendanceRate >= 0.8,
+      completedAt: attendanceRate >= 0.8 ? new Date() : undefined,
+      completedBy: attendanceRate >= 0.8 ? createdBy : undefined,
+      autoDetect: true,
+    },
+    {
+      id: generateId(),
+      category: 'catering',
+      title: '餐饮已确认',
+      description: '确认餐饮安排是否已落实',
+      completed: catering.length > 0 || cateringIds.length === 0,
+      completedAt: catering.length > 0 || cateringIds.length === 0 ? new Date() : undefined,
+      completedBy: catering.length > 0 || cateringIds.length === 0 ? createdBy : undefined,
+      autoDetect: true,
+    },
+    {
+      id: generateId(),
+      category: 'device',
+      title: '设备已预定',
+      description: '确认所需设备是否已预定',
+      completed: devices.length > 0 || deviceIds.length === 0,
+      completedAt: devices.length > 0 || deviceIds.length === 0 ? new Date() : undefined,
+      completedBy: devices.length > 0 || deviceIds.length === 0 ? createdBy : undefined,
+      autoDetect: true,
+    },
+  ];
 };
 
 const today = new Date('2026-06-11');
@@ -31,13 +104,30 @@ const addDays = (date: Date, days: number): Date => {
 
 const sampleMaterials: Material[] = [
   {
-    id: 'mat-001',
+    id: 'mat-001-v1',
     name: 'Q2季度财务报告.pdf',
     type: 'pdf',
     size: 2458624,
     uploadedBy: 'user-005',
-    uploadedAt: new Date('2026-06-08T14:30:00'),
+    uploadedAt: new Date('2026-06-06T10:00:00'),
     url: '/materials/q2-finance.pdf',
+    version: 1,
+    parentId: 'mat-001',
+    isLatest: false,
+    versionNote: '初始版本',
+  },
+  {
+    id: 'mat-001-v2',
+    name: 'Q2季度财务报告.pdf',
+    type: 'pdf',
+    size: 2621440,
+    uploadedBy: 'user-005',
+    uploadedAt: new Date('2026-06-08T14:30:00'),
+    url: '/materials/q2-finance-v2.pdf',
+    version: 2,
+    parentId: 'mat-001',
+    isLatest: true,
+    versionNote: '更新了华东区域销售数据',
   },
   {
     id: 'mat-002',
@@ -47,15 +137,35 @@ const sampleMaterials: Material[] = [
     uploadedBy: 'user-003',
     uploadedAt: new Date('2026-06-09T09:15:00'),
     url: '/materials/roadmap.pptx',
+    version: 1,
+    parentId: 'mat-002',
+    isLatest: true,
   },
   {
-    id: 'mat-003',
+    id: 'mat-003-v1',
     name: '市场调研报告.docx',
     type: 'doc',
     size: 1835008,
     uploadedBy: 'user-004',
-    uploadedAt: new Date('2026-06-07T16:45:00'),
+    uploadedAt: new Date('2026-06-05T14:00:00'),
     url: '/materials/market-research.docx',
+    version: 1,
+    parentId: 'mat-003',
+    isLatest: false,
+    versionNote: '初稿',
+  },
+  {
+    id: 'mat-003-v2',
+    name: '市场调研报告.docx',
+    type: 'doc',
+    size: 1966080,
+    uploadedBy: 'user-004',
+    uploadedAt: new Date('2026-06-07T16:45:00'),
+    url: '/materials/market-research-v2.docx',
+    version: 2,
+    parentId: 'mat-003',
+    isLatest: true,
+    versionNote: '补充了竞品分析章节',
   },
   {
     id: 'mat-004',
@@ -65,15 +175,47 @@ const sampleMaterials: Material[] = [
     uploadedBy: 'user-003',
     uploadedAt: new Date('2026-06-10T11:20:00'),
     url: '/materials/tech-arch.pdf',
+    version: 1,
+    parentId: 'mat-004',
+    isLatest: true,
   },
   {
-    id: 'mat-005',
+    id: 'mat-005-v1',
     name: '预算分配表.xlsx',
     type: 'xlsx',
     size: 524288,
     uploadedBy: 'user-005',
-    uploadedAt: new Date('2026-06-06T10:00:00'),
+    uploadedAt: new Date('2026-06-03T11:00:00'),
     url: '/materials/budget.xlsx',
+    version: 1,
+    parentId: 'mat-005',
+    isLatest: false,
+  },
+  {
+    id: 'mat-005-v2',
+    name: '预算分配表.xlsx',
+    type: 'xlsx',
+    size: 540672,
+    uploadedBy: 'user-005',
+    uploadedAt: new Date('2026-06-05T15:30:00'),
+    url: '/materials/budget-v2.xlsx',
+    version: 2,
+    parentId: 'mat-005',
+    isLatest: false,
+    versionNote: '调整了研发部门预算',
+  },
+  {
+    id: 'mat-005-v3',
+    name: '预算分配表.xlsx',
+    type: 'xlsx',
+    size: 557056,
+    uploadedBy: 'user-005',
+    uploadedAt: new Date('2026-06-06T10:00:00'),
+    url: '/materials/budget-v3.xlsx',
+    version: 3,
+    parentId: 'mat-005',
+    isLatest: true,
+    versionNote: '最终版，增加了市场拓展费用',
   },
 ];
 
@@ -107,11 +249,32 @@ export const mockMeetings: Meeting[] = [
       { id: 'agenda-003', title: '市场竞争态势分析', duration: 30, presenterId: 'user-004', order: 3 },
       { id: 'agenda-004', title: '下半年战略方向讨论', duration: 50, order: 4 },
     ],
-    materials: [sampleMaterials[0], sampleMaterials[4]],
+    materials: [sampleMaterials[0], sampleMaterials[1], sampleMaterials[6], sampleMaterials[7], sampleMaterials[8]],
     decisions: [],
     status: 'scheduled',
     createdAt: new Date('2026-06-05T10:00:00'),
     createdBy: 'user-001',
+    preMeetingChecklist: createPreMeetingChecklist({
+      agenda: [
+        { id: 'agenda-001', title: 'Q1季度业绩回顾', duration: 30, presenterId: 'user-005', order: 1 },
+        { id: 'agenda-002', title: 'Q2季度目标执行评估', duration: 40, presenterId: 'user-002', order: 2 },
+        { id: 'agenda-003', title: '市场竞争态势分析', duration: 30, presenterId: 'user-004', order: 3 },
+        { id: 'agenda-004', title: '下半年战略方向讨论', duration: 50, order: 4 },
+      ],
+      materials: [sampleMaterials[0], sampleMaterials[1], sampleMaterials[6], sampleMaterials[7], sampleMaterials[8]],
+      attendees: [
+        createAttendee('user-001', 'confirmed', true, new Date('2026-06-09T08:00:00')),
+        createAttendee('user-002', 'confirmed', false, new Date('2026-06-09T09:30:00')),
+        createAttendee('user-003', 'confirmed', false, new Date('2026-06-09T10:15:00')),
+        createAttendee('user-004', 'tentative', false, new Date('2026-06-10T14:00:00')),
+        createAttendee('user-005', 'confirmed', false, new Date('2026-06-09T16:20:00')),
+        createAttendee('user-006', 'pending', false),
+      ],
+      cateringIds: ['catering-001', 'catering-007'],
+      deviceIds: ['device-001', 'device-003', 'device-005', 'device-007', 'device-010'],
+      catering: getCateringByIds(['catering-001', 'catering-007']),
+      devices: getDevicesByIds(['device-001', 'device-003', 'device-005', 'device-007', 'device-010']),
+    }, 'user-001'),
   },
   {
     id: 'meeting-002',
@@ -145,11 +308,35 @@ export const mockMeetings: Meeting[] = [
       { id: 'agenda-008', title: '安全合规审查', duration: 20, order: 4 },
       { id: 'agenda-009', title: '发布计划确认', duration: 15, order: 5 },
     ],
-    materials: [sampleMaterials[1], sampleMaterials[3]],
+    materials: [sampleMaterials[2], sampleMaterials[5]],
     decisions: [],
     status: 'scheduled',
     createdAt: new Date('2026-06-07T14:30:00'),
     createdBy: 'user-003',
+    preMeetingChecklist: createPreMeetingChecklist({
+      agenda: [
+        { id: 'agenda-005', title: '产品架构总览', duration: 25, presenterId: 'user-003', order: 1 },
+        { id: 'agenda-006', title: '核心功能演示', duration: 35, presenterId: 'user-007', order: 2 },
+        { id: 'agenda-007', title: '性能测试报告', duration: 25, order: 3 },
+        { id: 'agenda-008', title: '安全合规审查', duration: 20, order: 4 },
+        { id: 'agenda-009', title: '发布计划确认', duration: 15, order: 5 },
+      ],
+      materials: [sampleMaterials[2], sampleMaterials[5]],
+      attendees: [
+        createAttendee('user-003', 'confirmed', true, new Date('2026-06-08T11:00:00')),
+        createAttendee('user-007', 'confirmed', false, new Date('2026-06-08T11:30:00')),
+        createAttendee('user-002', 'confirmed', false, new Date('2026-06-08T14:00:00')),
+        createAttendee('user-004', 'confirmed', false, new Date('2026-06-09T09:00:00')),
+        createAttendee('user-005', 'declined', false, new Date('2026-06-08T17:00:00')),
+        createAttendee('user-006', 'confirmed', false, new Date('2026-06-09T10:30:00')),
+        createAttendee('user-001', 'confirmed', false, new Date('2026-06-09T08:00:00')),
+        createAttendee('user-008', 'pending', false),
+      ],
+      cateringIds: ['catering-002', 'catering-005'],
+      deviceIds: ['device-001', 'device-003', 'device-005', 'device-008'],
+      catering: getCateringByIds(['catering-002', 'catering-005']),
+      devices: getDevicesByIds(['device-001', 'device-003', 'device-005', 'device-008']),
+    }, 'user-003'),
   },
   {
     id: 'meeting-003',
@@ -179,7 +366,7 @@ export const mockMeetings: Meeting[] = [
       { id: 'agenda-012', title: '问题与困难反馈', duration: 20, order: 3 },
       { id: 'agenda-013', title: '下周工作目标', duration: 20, order: 4 },
     ],
-    materials: [sampleMaterials[2]],
+    materials: [sampleMaterials[3], sampleMaterials[4]],
     decisions: [
       '增加华东地区销售资源投入',
       '启动大客户专项攻坚计划',
@@ -219,11 +406,32 @@ export const mockMeetings: Meeting[] = [
       { id: 'agenda-016', title: '实施计划与里程碑', duration: 25, presenterId: 'user-003', order: 3 },
       { id: 'agenda-017', title: '团队分工与协作机制', duration: 20, order: 4 },
     ],
-    materials: [sampleMaterials[4]],
+    materials: [sampleMaterials[6], sampleMaterials[7], sampleMaterials[8]],
     decisions: [],
     status: 'scheduled',
     createdAt: new Date('2026-06-08T09:00:00'),
     createdBy: 'user-005',
+    preMeetingChecklist: createPreMeetingChecklist({
+      agenda: [
+        { id: 'agenda-014', title: '项目背景与目标', duration: 20, presenterId: 'user-005', order: 1 },
+        { id: 'agenda-015', title: '项目范围界定', duration: 25, order: 2 },
+        { id: 'agenda-016', title: '实施计划与里程碑', duration: 25, presenterId: 'user-003', order: 3 },
+        { id: 'agenda-017', title: '团队分工与协作机制', duration: 20, order: 4 },
+      ],
+      materials: [sampleMaterials[6], sampleMaterials[7], sampleMaterials[8]],
+      attendees: [
+        createAttendee('user-005', 'confirmed', true, new Date('2026-06-08T10:00:00')),
+        createAttendee('user-003', 'confirmed', false, new Date('2026-06-08T11:20:00')),
+        createAttendee('user-001', 'confirmed', false, new Date('2026-06-09T08:30:00')),
+        createAttendee('user-006', 'confirmed', false, new Date('2026-06-09T14:00:00')),
+        createAttendee('user-007', 'tentative', false, new Date('2026-06-10T09:15:00')),
+        createAttendee('user-008', 'pending', false),
+      ],
+      cateringIds: ['catering-004', 'catering-007'],
+      deviceIds: ['device-001', 'device-003', 'device-005'],
+      catering: getCateringByIds(['catering-004', 'catering-007']),
+      devices: getDevicesByIds(['device-001', 'device-003', 'device-005']),
+    }, 'user-005'),
   },
   {
     id: 'meeting-005',
@@ -257,6 +465,25 @@ export const mockMeetings: Meeting[] = [
     status: 'scheduled',
     createdAt: new Date('2026-06-09T09:30:00'),
     createdBy: 'user-006',
+    preMeetingChecklist: createPreMeetingChecklist({
+      agenda: [
+        { id: 'agenda-018', title: '现状调研结果分享', duration: 25, presenterId: 'user-006', order: 1 },
+        { id: 'agenda-019', title: '培训课程体系设计', duration: 30, order: 2 },
+        { id: 'agenda-020', title: '讲师团队建设方案', duration: 20, order: 3 },
+        { id: 'agenda-021', title: '效果评估与考核机制', duration: 15, order: 4 },
+      ],
+      materials: [],
+      attendees: [
+        createAttendee('user-006', 'confirmed', true, new Date('2026-06-09T10:00:00')),
+        createAttendee('user-008', 'confirmed', false, new Date('2026-06-09T10:30:00')),
+        createAttendee('user-004', 'tentative', false, new Date('2026-06-10T08:45:00')),
+        createAttendee('user-003', 'confirmed', false, new Date('2026-06-10T11:00:00')),
+      ],
+      cateringIds: ['catering-008'],
+      deviceIds: ['device-003', 'device-008'],
+      catering: getCateringByIds(['catering-008']),
+      devices: getDevicesByIds(['device-003', 'device-008']),
+    }, 'user-006'),
   },
   {
     id: 'meeting-006',
@@ -289,7 +516,7 @@ export const mockMeetings: Meeting[] = [
       { id: 'agenda-024', title: '各部门预算初步方案汇报', duration: 60, order: 3 },
       { id: 'agenda-025', title: '预算编制工作部署', duration: 45, order: 4 },
     ],
-    materials: [sampleMaterials[0], sampleMaterials[4]],
+    materials: [sampleMaterials[0], sampleMaterials[1], sampleMaterials[6], sampleMaterials[7], sampleMaterials[8]],
     decisions: [
       '2027年营收目标增长18%',
       '研发投入占比提升至15%',
@@ -330,7 +557,7 @@ export const mockMeetings: Meeting[] = [
       { id: 'agenda-028', title: '创意发散 - 品牌定位方向', duration: 40, order: 3 },
       { id: 'agenda-029', title: '方案筛选与后续行动', duration: 30, order: 4 },
     ],
-    materials: [sampleMaterials[2]],
+    materials: [sampleMaterials[3], sampleMaterials[4]],
     decisions: [
       '品牌定位聚焦高端智能科技',
       'VI系统全面升级，预计Q3完成',
@@ -409,12 +636,32 @@ export const mockMeetings: Meeting[] = [
       { id: 'agenda-036', title: '技术债务清理计划', duration: 20, order: 3 },
       { id: 'agenda-037', title: '新技术选型讨论', duration: 15, order: 4 },
     ],
-    materials: [sampleMaterials[3]],
+    materials: [sampleMaterials[5]],
     decisions: [],
     status: 'in-progress',
     createdAt: new Date('2026-06-06T14:00:00'),
     createdBy: 'user-003',
     actualStartTime: setTime(today, 16, 2),
+    preMeetingChecklist: createPreMeetingChecklist({
+      agenda: [
+        { id: 'agenda-034', title: '上周技术决策执行跟踪', duration: 20, presenterId: 'user-003', order: 1 },
+        { id: 'agenda-035', title: '微服务拆分方案评审', duration: 35, order: 2 },
+        { id: 'agenda-036', title: '技术债务清理计划', duration: 20, order: 3 },
+        { id: 'agenda-037', title: '新技术选型讨论', duration: 15, order: 4 },
+      ],
+      materials: [sampleMaterials[5]],
+      attendees: [
+        createAttendee('user-003', 'confirmed', true, new Date('2026-06-08T10:00:00')),
+        createAttendee('user-007', 'confirmed', false, new Date('2026-06-08T10:30:00')),
+        createAttendee('user-002', 'tentative', false, new Date('2026-06-09T15:00:00')),
+        createAttendee('user-001', 'confirmed', false, new Date('2026-06-10T08:30:00')),
+        createAttendee('user-005', 'confirmed', false, new Date('2026-06-09T09:00:00')),
+      ],
+      cateringIds: ['catering-004', 'catering-005'],
+      deviceIds: ['device-002', 'device-003', 'device-005', 'device-008'],
+      catering: getCateringByIds(['catering-004', 'catering-005']),
+      devices: getDevicesByIds(['device-002', 'device-003', 'device-005', 'device-008']),
+    }, 'user-003'),
   },
   {
     id: 'meeting-010',
@@ -446,7 +693,7 @@ export const mockMeetings: Meeting[] = [
       { id: 'agenda-041', title: '风险与问题讨论', duration: 30, order: 4 },
       { id: 'agenda-042', title: '后续计划调整', duration: 30, order: 5 },
     ],
-    materials: [sampleMaterials[1], sampleMaterials[3]],
+    materials: [sampleMaterials[2], sampleMaterials[5]],
     decisions: [
       '项目进度符合预期，完成度约60%',
       '新增性能优化专项，延期2周交付',

@@ -35,7 +35,8 @@ function getAvailableDevicesForRoom(
     (d) =>
       d.compatibleRooms.includes(roomId) &&
       d.status !== 'faulty' &&
-      d.status !== 'maintenance'
+      d.status !== 'maintenance' &&
+      d.status !== 'in-use'
   );
   const conflicts = detectDeviceConflict(
     compatibleDevices.map((d) => d.id),

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useMeetingStore } from '@/store/useMeetingStore';
 import { useResourceStore } from '@/store/useResourceStore';
@@ -8,6 +8,8 @@ import AgendaPanel from '@/components/meeting/AgendaPanel';
 import MaterialPanel from '@/components/meeting/MaterialPanel';
 import AttendanceGrid from '@/components/meeting/AttendanceGrid';
 import ResourceAdjuster from '@/components/meeting/ResourceAdjuster';
+import PreMeetingChecklist from '@/components/meeting/PreMeetingChecklist';
+import { AlertTriangle } from 'lucide-react';
 import {
   Clock,
   MapPin,
@@ -33,16 +35,83 @@ type TabType = 'overview' | 'agenda' | 'attendance' | 'resources';
 export default function MeetingDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getMeetingById, updateMeetingStatus, addAgendaItem, removeAgendaItem, addDecision, adjustResources, updateAttendanceStatus } =
-    useMeetingStore();
+  const {
+    getMeetingById,
+    updateMeetingStatus,
+    addAgendaItem,
+    removeAgendaItem,
+    addDecision,
+    adjustResources,
+    updateAttendanceStatus,
+    toggleChecklistItem,
+    addChecklistItem,
+    removeChecklistItem,
+    addMaterial,
+    removeMaterial,
+    setMaterialLatestVersion,
+  } = useMeetingStore();
   const { rooms, devices, cateringOptions } = useResourceStore();
-  const { users } = useUserStore();
+  const { users, currentUser } = useUserStore();
 
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [newDecision, setNewDecision] = useState('');
   const [showDecisionInput, setShowDecisionInput] = useState(false);
 
   const meeting = id ? getMeetingById(id) : undefined;
+
+  const isHost = currentUser
+    ? meeting?.attendees.some(a => a.userId === currentUser.id && a.isHost) ?? false
+    : false;
+
+  const checklist = meeting?.preMeetingChecklist ?? [];
+  const hasUncompletedItems = checklist.some(item => {
+    if (item.autoDetect) {
+      switch (item.category) {
+        case 'agenda':
+          return (meeting?.agenda.length ?? 0) === 0;
+        case 'material':
+          return (meeting?.materials.length ?? 0) === 0;
+        case 'attendance': {
+          const total = meeting?.attendees.length ?? 0;
+          if (total === 0) return true;
+          const responded = meeting?.attendees.filter(a => a.status !== 'pending').length ?? 0;
+          return responded / total < 0.8;
+        }
+        case 'catering':
+          return (meeting?.catering.length ?? 0) === 0 && (meeting?.cateringIds.length ?? 0) > 0;
+        case 'device':
+          return (meeting?.devices.length ?? 0) === 0 && (meeting?.deviceIds.length ?? 0) > 0;
+        default:
+          return false;
+      }
+    }
+    return !item.completed;
+  });
+
+  const isWithin24Hours = meeting
+    ? (() => {
+        const now = new Date();
+        const diff = new Date(meeting.startTime).getTime() - now.getTime();
+        return diff > 0 && diff <= 24 * 60 * 60 * 1000;
+      })()
+    : false;
+
+  const showTopWarning = hasUncompletedItems && isWithin24Hours && meeting?.status === 'scheduled';
+
+  const handleToggleChecklistItem = (itemId: string, completed: boolean) => {
+    if (!meeting || !currentUser) return;
+    toggleChecklistItem(meeting.id, itemId, completed, currentUser.id);
+  };
+
+  const handleAddChecklistItem = (item: Omit<import('@/types').PreMeetingChecklistItem, 'id'>) => {
+    if (!meeting) return;
+    addChecklistItem(meeting.id, item);
+  };
+
+  const handleRemoveChecklistItem = (itemId: string) => {
+    if (!meeting) return;
+    removeChecklistItem(meeting.id, itemId);
+  };
 
   if (!meeting) {
     return (
@@ -115,6 +184,22 @@ export default function MeetingDetail() {
         <ArrowLeft className="w-4 h-4" />
         返回
       </button>
+
+      {showTopWarning && (
+        <div className="p-4 rounded-xl bg-gradient-to-r from-danger-500 to-rose-500 text-white animate-pulse-once">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold">
+                ⚠️ 会议将在24小时内开始，还有未完成的会前准备项
+              </p>
+              <p className="text-xs text-white/80 mt-0.5">
+                请尽快完成会前准备工作，确保会议顺利进行
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="p-6 rounded-2xl bg-gradient-primary text-white relative overflow-hidden shadow-card">
         <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-white/5" />
@@ -271,6 +356,14 @@ export default function MeetingDetail() {
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
+              <PreMeetingChecklist
+                meeting={meeting}
+                onToggleItem={handleToggleChecklistItem}
+                onAddItem={handleAddChecklistItem}
+                onRemoveItem={handleRemoveChecklistItem}
+                isHost={isHost}
+              />
+
               <div className="p-6 rounded-2xl bg-white border border-neutral-100 shadow-card">
                 <h3 className="text-sm font-bold text-neutral-800 mb-4 flex items-center gap-2">
                   <Info className="w-4 h-4 text-primary-500" />
@@ -479,7 +572,7 @@ export default function MeetingDetail() {
             <div className="p-6 rounded-2xl bg-white border border-neutral-100 shadow-card">
               <AgendaPanel
                 agenda={meeting.agenda}
-                users={users as any}
+                users={users}
                 onAdd={item => addAgendaItem(meeting.id, item)}
                 onRemove={id => removeAgendaItem(meeting.id, id)}
                 readOnly={false}
@@ -488,6 +581,10 @@ export default function MeetingDetail() {
             <div className="p-6 rounded-2xl bg-white border border-neutral-100 shadow-card">
               <MaterialPanel
                 materials={meeting.materials}
+                users={users}
+                onAdd={material => addMaterial(meeting.id, material)}
+                onRemove={materialId => removeMaterial(meeting.id, materialId)}
+                onSetLatest={materialId => setMaterialLatestVersion(meeting.id, materialId)}
                 readOnly={false}
               />
             </div>

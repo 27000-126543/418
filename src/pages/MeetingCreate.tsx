@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import StepWizard from '@/components/common/StepWizard';
 import RoomGrid from '@/components/meeting/RoomGrid';
+import RoomCalendar from '@/components/meeting/RoomCalendar';
 import DeviceSelector from '@/components/meeting/DeviceSelector';
 import CateringPicker from '@/components/meeting/CateringPicker';
 import ConflictAlert from '@/components/meeting/ConflictAlert';
@@ -25,6 +26,8 @@ import {
   X,
   Building2,
   Sparkles,
+  Calendar,
+  LayoutGrid,
 } from 'lucide-react';
 import type {
   CreateMeetingData,
@@ -84,6 +87,7 @@ export default function MeetingCreate() {
   const [conflicts, setConflicts] = useState<ResourceConflict[]>([]);
   const [suggestions, setSuggestions] = useState<AlternativeSuggestion[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'calendar'>('grid');
 
   const selectedDate = new Date(formData.date);
   const startDateTime = new Date(
@@ -98,7 +102,7 @@ export default function MeetingCreate() {
   );
   const _availableDevices = formData.roomId
     ? getAvailableDevices(formData.roomId, startDateTime, endDateTime)
-    : devices.filter(d => d.status !== 'faulty');
+    : devices.filter(d => d.status !== 'faulty' && d.status !== 'maintenance' && d.status !== 'in-use');
 
   const filteredUsers = users.filter(
     u =>
@@ -211,7 +215,7 @@ export default function MeetingCreate() {
     const room = rooms.find(r => r.id === roomId);
     if (!room) return [];
     const availableRoomDevices = _availableDevices.filter(d =>
-      d.compatibleRooms.includes(roomId) && d.status === 'available'
+      d.compatibleRooms.includes(roomId)
     );
     const matchedTypeDeviceIds: string[] = [];
     const matchedTypes = new Set<DeviceType>();
@@ -237,17 +241,42 @@ export default function MeetingCreate() {
     }));
   };
 
-  const handleSuggestion = (s: AlternativeSuggestion) => {
+  const handleTimeSelect = (data: { roomId: string; startTime: Date; endTime: Date }) => {
+    const autoSelectedIds = getAutoSelectedDevices(data.roomId);
     setFormData(prev => ({
       ...prev,
-      date: new Date(s.suggestedStartTime).toISOString().slice(0, 10),
-      startTime: new Date(s.suggestedStartTime)
-        .toTimeString()
-        .slice(0, 5),
-      endTime: new Date(s.suggestedEndTime).toTimeString().slice(0, 5),
-      roomId: s.suggestedRoomId ?? prev.roomId,
-      deviceIds: s.suggestedDeviceIds ?? prev.deviceIds,
+      roomId: data.roomId,
+      date: data.startTime.toISOString().slice(0, 10),
+      startTime: data.startTime.toTimeString().slice(0, 5),
+      endTime: data.endTime.toTimeString().slice(0, 5),
+      deviceIds: autoSelectedIds,
     }));
+  };
+
+  const handleSuggestion = (s: AlternativeSuggestion) => {
+    setFormData(prev => {
+      const newRoomId = s.suggestedRoomId ?? prev.roomId;
+      const newStart = new Date(s.suggestedStartTime);
+      const newEnd = new Date(s.suggestedEndTime);
+      let newDeviceIds: string[];
+
+      if (s.suggestedDeviceIds !== undefined) {
+        newDeviceIds = s.suggestedDeviceIds;
+      } else {
+        const availableDevices = getAvailableDevices(newRoomId, newStart, newEnd);
+        const availableDeviceIds = new Set(availableDevices.map(d => d.id));
+        newDeviceIds = prev.deviceIds.filter(id => availableDeviceIds.has(id));
+      }
+
+      return {
+        ...prev,
+        date: newStart.toISOString().slice(0, 10),
+        startTime: newStart.toTimeString().slice(0, 5),
+        endTime: newEnd.toTimeString().slice(0, 5),
+        roomId: newRoomId,
+        deviceIds: newDeviceIds,
+      };
+    });
   };
 
   const canProceed = (step: number) => {
@@ -535,15 +564,52 @@ export default function MeetingCreate() {
                   <Building2 className="w-4 h-4 text-primary-500" />
                   选择会议室 *
                 </h3>
-                <span className="text-xs text-neutral-500">
-                  可用 {availableRooms.length} / 共 {rooms.length} 间
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-neutral-500">
+                    可用 {availableRooms.length} / 共 {rooms.length} 间
+                  </span>
+                  <div className="flex p-0.5 bg-neutral-100 rounded-lg">
+                    <button
+                      onClick={() => setViewMode('grid')}
+                      className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                        viewMode === 'grid'
+                          ? 'bg-white text-primary-600 shadow-sm'
+                          : 'text-neutral-500 hover:text-neutral-700'
+                      }`}
+                    >
+                      <LayoutGrid className="w-3.5 h-3.5" />
+                      网格视图
+                    </button>
+                    <button
+                      onClick={() => setViewMode('calendar')}
+                      className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                        viewMode === 'calendar'
+                          ? 'bg-white text-primary-600 shadow-sm'
+                          : 'text-neutral-500 hover:text-neutral-700'
+                      }`}
+                    >
+                      <Calendar className="w-3.5 h-3.5" />
+                      日历视图
+                    </button>
+                  </div>
+                </div>
               </div>
-              <RoomGrid
-                rooms={rooms}
-                selectedRoomId={formData.roomId}
-                onSelectRoom={handleSelectRoom}
-              />
+              {viewMode === 'grid' ? (
+                <RoomGrid
+                  rooms={rooms}
+                  selectedRoomId={formData.roomId}
+                  onSelectRoom={handleSelectRoom}
+                />
+              ) : (
+                <RoomCalendar
+                  expectedAttendees={formData.expectedAttendees}
+                  selectedRoomId={formData.roomId}
+                  selectedStartTime={startDateTime}
+                  selectedEndTime={endDateTime}
+                  onTimeSelect={handleTimeSelect}
+                  onRoomSelect={handleSelectRoom}
+                />
+              )}
             </div>
 
             {formData.roomId && (
@@ -565,6 +631,8 @@ export default function MeetingCreate() {
                   roomId={formData.roomId}
                   selectedIds={formData.deviceIds}
                   onChange={handleDeviceChange}
+                  startTime={startDateTime}
+                  endTime={endDateTime}
                 />
 
                 <div className="pt-4 border-t border-neutral-100">

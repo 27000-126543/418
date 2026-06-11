@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   Upload,
   FileText,
@@ -17,6 +17,11 @@ import {
   AlertCircle,
   Loader2,
   Info,
+  ChevronDown,
+  ChevronUp,
+  RotateCcw,
+  Tag,
+  History,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Material, MaterialType, User } from '@/types';
@@ -25,9 +30,11 @@ import { formatFileSize } from '@/utils/formatters';
 interface MaterialPanelProps {
   materials: Material[];
   users?: User[];
-  onAdd?: (material: Omit<Material, 'id' | 'uploadedAt'>) => void;
+  onAdd?: (material: Omit<Material, 'id' | 'uploadedAt' | 'version' | 'parentId' | 'isLatest'>) => void;
   onRemove?: (materialId: string) => void;
+  onSetLatest?: (materialId: string) => void;
   readOnly?: boolean;
+  meetingId?: string;
 }
 
 const typeIcons: Record<MaterialType, typeof FileText> = {
@@ -75,6 +82,15 @@ function getTypeFromFilename(filename: string): MaterialType {
 function formatDate(date: Date): string {
   const d = new Date(date);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+interface MaterialGroup {
+  parentId: string;
+  name: string;
+  type: MaterialType;
+  versions: Material[];
+  latestVersion: Material;
+  versionCount: number;
 }
 
 interface PreviewContentProps {
@@ -275,12 +291,28 @@ function OfficePreviewContent({ material, uploader, onDownload }: PreviewContent
           <h3 className="mt-5 text-white text-xl font-semibold line-clamp-2">
             {material.name}
           </h3>
-          <p className="mt-1 text-white/70 text-sm">
-            {formatFileSize(material.size)}
-          </p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-white/70 text-sm">
+              v{material.version}
+            </span>
+            <span className="text-white/50">·</span>
+            <span className="text-white/70 text-sm">
+              {formatFileSize(material.size)}
+            </span>
+          </div>
         </div>
 
         <div className="p-6 space-y-4">
+          {material.versionNote && (
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-accent-50 border border-accent-100">
+              <Tag className="w-5 h-5 text-accent-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs text-accent-500 mb-0.5">版本说明</p>
+                <p className="text-sm text-neutral-700">{material.versionNote}</p>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-3 p-3 rounded-xl bg-neutral-50">
             <div className="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center flex-shrink-0">
               <Info className="w-5 h-5 text-primary-500" />
@@ -348,30 +380,46 @@ function OfficePreviewContent({ material, uploader, onDownload }: PreviewContent
 
 interface PreviewModalProps {
   material: Material;
+  allVersions?: Material[];
   uploader?: User;
   onClose: () => void;
   onDownload: (material: Material) => void;
+  onVersionChange?: (material: Material) => void;
 }
 
-function PreviewModal({ material, uploader, onClose, onDownload }: PreviewModalProps) {
-  const TypeIcon = typeIcons[material.type];
+function PreviewModal({ material, allVersions = [], uploader, onClose, onDownload, onVersionChange }: PreviewModalProps) {
+  const [currentMaterial, setCurrentMaterial] = useState<Material>(material);
+  const TypeIcon = typeIcons[currentMaterial.type];
+  const hasMultipleVersions = allVersions.length > 1;
 
-  const renderContent = () => {
-    switch (material.type) {
-      case 'image':
-        return <ImagePreviewContent material={material} uploader={uploader} onDownload={onDownload} />;
-      case 'pdf':
-        return <PdfPreviewContent material={material} uploader={uploader} onDownload={onDownload} />;
-      case 'doc':
-      case 'ppt':
-      case 'xlsx':
-        return <OfficePreviewContent material={material} uploader={uploader} onDownload={onDownload} />;
-      default:
-        return <OfficePreviewContent material={material} uploader={uploader} onDownload={onDownload} />;
+  useEffect(() => {
+    setCurrentMaterial(material);
+  }, [material]);
+
+  const handleVersionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedVersion = allVersions.find(v => v.id === e.target.value);
+    if (selectedVersion) {
+      setCurrentMaterial(selectedVersion);
+      onVersionChange?.(selectedVersion);
     }
   };
 
-  const showFooter = material.type !== 'image';
+  const renderContent = () => {
+    switch (currentMaterial.type) {
+      case 'image':
+        return <ImagePreviewContent material={currentMaterial} uploader={uploader} onDownload={onDownload} />;
+      case 'pdf':
+        return <PdfPreviewContent material={currentMaterial} uploader={uploader} onDownload={onDownload} />;
+      case 'doc':
+      case 'ppt':
+      case 'xlsx':
+        return <OfficePreviewContent material={currentMaterial} uploader={uploader} onDownload={onDownload} />;
+      default:
+        return <OfficePreviewContent material={currentMaterial} uploader={uploader} onDownload={onDownload} />;
+    }
+  };
+
+  const showFooter = currentMaterial.type !== 'image';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 md:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -381,23 +429,46 @@ function PreviewModal({ material, uploader, onClose, onDownload }: PreviewModalP
             <div
               className={cn(
                 'w-10 h-10 md:w-11 md:h-11 rounded-xl flex items-center justify-center flex-shrink-0',
-                typeColors[material.type]
+                typeColors[currentMaterial.type]
               )}
             >
               <TypeIcon className="w-5 h-5 md:w-[22px] md:h-[22px]" />
             </div>
             <div className="min-w-0">
               <h4 className="text-neutral-800 font-semibold text-sm md:text-base truncate">
-                {material.name}
+                {currentMaterial.name}
               </h4>
-              <p className="text-neutral-400 text-xs md:text-sm">
-                {formatFileSize(material.size)}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-neutral-400 text-xs md:text-sm">
+                  v{currentMaterial.version} · {formatFileSize(currentMaterial.size)}
+                </p>
+                {currentMaterial.isLatest && (
+                  <span className="px-2 py-0.5 rounded-full bg-gradient-accent text-white text-xs font-medium">
+                    最新版本
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-1 md:gap-2 flex-shrink-0 ml-2">
+            {hasMultipleVersions && (
+              <div className="flex items-center gap-2 mr-2">
+                <History className="w-4 h-4 text-neutral-400" />
+                <select
+                  value={currentMaterial.id}
+                  onChange={handleVersionChange}
+                  className="input-base !py-1.5 !text-sm !w-32 md:!w-40"
+                >
+                  {allVersions.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      v{v.version} {v.isLatest ? '(最新)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <button
-              onClick={() => onDownload(material)}
+              onClick={() => onDownload(currentMaterial)}
               className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 md:py-2 rounded-lg text-xs md:text-sm text-neutral-600 hover:bg-neutral-100 transition-all"
             >
               <Download className="w-4 h-4" />
@@ -412,6 +483,18 @@ function PreviewModal({ material, uploader, onClose, onDownload }: PreviewModalP
           </div>
         </div>
 
+        {hasMultipleVersions && currentMaterial.versionNote && (
+          <div className="px-4 md:px-6 py-3 bg-neutral-50 border-b border-neutral-100 flex-shrink-0">
+            <div className="flex items-start gap-2">
+              <Tag className="w-4 h-4 text-accent-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <span className="text-xs text-neutral-500 font-medium">版本说明：</span>
+                <span className="text-sm text-neutral-700">{currentMaterial.versionNote}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
           {renderContent()}
         </div>
@@ -422,10 +505,10 @@ function PreviewModal({ material, uploader, onClose, onDownload }: PreviewModalP
               <UserIcon className="w-4 h-4" />
               <span>{uploader?.name || '未知用户'}</span>
               <span className="hidden sm:inline">·</span>
-              <span className="hidden sm:inline">{formatDate(material.uploadedAt)}</span>
+              <span className="hidden sm:inline">{formatDate(currentMaterial.uploadedAt)}</span>
             </div>
             <button
-              onClick={() => onDownload(material)}
+              onClick={() => onDownload(currentMaterial)}
               className="btn-accent px-4 py-2 text-sm"
             >
               <Download className="w-4 h-4" />
@@ -438,39 +521,190 @@ function PreviewModal({ material, uploader, onClose, onDownload }: PreviewModalP
   );
 }
 
+interface VersionNoteModalProps {
+  fileName: string;
+  onConfirm: (note: string) => void;
+  onCancel: () => void;
+}
+
+function VersionNoteModal({ fileName, onConfirm, onCancel }: VersionNoteModalProps) {
+  const [note, setNote] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onConfirm(note);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-slide-up">
+        <form onSubmit={handleSubmit}>
+          <div className="px-6 py-4 border-b border-neutral-100">
+            <h4 className="text-lg font-semibold text-neutral-800">创建新版本</h4>
+            <p className="text-sm text-neutral-500 mt-1">
+              检测到同名文件：<span className="font-medium text-neutral-700">{fileName}</span>
+            </p>
+          </div>
+          <div className="px-6 py-5">
+            <div className="mb-4 p-3 rounded-xl bg-accent-50 border border-accent-100">
+              <div className="flex items-start gap-2">
+                <Info className="w-5 h-5 text-accent-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-accent-700">
+                    已有同名文件，将创建新版本
+                  </p>
+                  <p className="text-xs text-accent-600/80 mt-0.5">
+                    旧版本会被保留，您可以随时查看或恢复历史版本
+                  </p>
+                </div>
+              </div>
+            </div>
+            <label className="block text-sm font-medium text-neutral-700 mb-2">
+              版本说明 <span className="text-neutral-400 font-normal">(可选)</span>
+            </label>
+            <input
+              ref={inputRef}
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="例如：更新了数据、修复了错误等"
+              className="input-base w-full"
+              maxLength={100}
+            />
+            <p className="text-xs text-neutral-400 mt-2 text-right">
+              {note.length}/100
+            </p>
+          </div>
+          <div className="px-6 py-4 bg-neutral-50 border-t border-neutral-100 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-4 py-2 rounded-lg text-neutral-600 hover:bg-neutral-100 transition-all text-sm font-medium"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-lg bg-gradient-primary text-white hover:opacity-90 transition-all text-sm font-medium"
+            >
+              确认上传
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function MaterialPanel({
   materials,
   users = [],
   onAdd,
   onRemove,
+  onSetLatest,
   readOnly = false,
 }: MaterialPanelProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [pendingFile, setPendingFile] = useState<{ file: File; type: MaterialType; url: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getUploader = (uploaderId: string) =>
     users.find((u) => u.id === uploaderId);
 
+  const materialGroups = useMemo((): MaterialGroup[] => {
+    const groupsMap = new Map<string, Material[]>();
+    
+    materials.forEach(m => {
+      const existing = groupsMap.get(m.parentId) || [];
+      existing.push(m);
+      groupsMap.set(m.parentId, existing);
+    });
+
+    const groups: MaterialGroup[] = [];
+    groupsMap.forEach((versions, parentId) => {
+      const sortedVersions = versions.sort((a, b) => b.version - a.version);
+      const latestVersion = sortedVersions.find(v => v.isLatest) || sortedVersions[0];
+      groups.push({
+        parentId,
+        name: latestVersion.name,
+        type: latestVersion.type,
+        versions: sortedVersions,
+        latestVersion,
+        versionCount: versions.length,
+      });
+    });
+
+    return groups.sort((a, b) => a.name.localeCompare(b.name));
+  }, [materials]);
+
+  const toggleGroup = (parentId: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(parentId)) {
+        next.delete(parentId);
+      } else {
+        next.add(parentId);
+      }
+      return next;
+    });
+  };
+
   const handleFiles = useCallback(
     (files: FileList | File[]) => {
       if (!onAdd) return;
       const fileArray = Array.from(files);
+      
       fileArray.forEach((file) => {
         const type = getTypeFromFilename(file.name);
         const url = URL.createObjectURL(file);
-
-        onAdd({
-          name: file.name,
-          type,
-          size: file.size,
-          uploadedBy: users[0]?.id || 'user-001',
-          url,
-        });
+        
+        const existingSameName = materials.some(m => m.name === file.name);
+        
+        if (existingSameName) {
+          setPendingFile({ file, type, url });
+        } else {
+          onAdd({
+            name: file.name,
+            type,
+            size: file.size,
+            uploadedBy: users[0]?.id || 'user-001',
+            url,
+            versionNote: '',
+          });
+        }
       });
     },
-    [onAdd, users]
+    [onAdd, users, materials]
   );
+
+  const handleConfirmVersion = (note: string) => {
+    if (!pendingFile || !onAdd) return;
+    
+    onAdd({
+      name: pendingFile.file.name,
+      type: pendingFile.type,
+      size: pendingFile.file.size,
+      uploadedBy: users[0]?.id || 'user-001',
+      url: pendingFile.url,
+      versionNote: note,
+    });
+    
+    setPendingFile(null);
+  };
+
+  const handleCancelVersion = () => {
+    if (pendingFile) {
+      URL.revokeObjectURL(pendingFile.url);
+    }
+    setPendingFile(null);
+  };
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -526,13 +760,16 @@ export default function MaterialPanel({
     );
   };
 
+  const latestCount = materialGroups.length;
+  const totalCount = materials.length;
+
   return (
     <div className="bg-white rounded-2xl shadow-card overflow-hidden border border-neutral-100">
       <div className="px-6 py-4 bg-gradient-primary flex items-center justify-between">
         <div>
           <h3 className="text-white font-semibold text-lg">会议材料</h3>
           <p className="text-primary-100 text-sm mt-0.5">
-            共 {materials.length} 个文件
+            共 {latestCount} 份文件 {totalCount > latestCount && `(${totalCount} 个版本)`}
           </p>
         </div>
         {!readOnly && (
@@ -585,82 +822,211 @@ export default function MaterialPanel({
       )}
 
       <div className="px-6 py-5">
-        {materials.length === 0 ? (
+        {materialGroups.length === 0 ? (
           <div className="py-10 text-center">
             <FileText className="w-12 h-12 mx-auto text-neutral-300 mb-3" />
             <p className="text-neutral-400 text-sm">暂无会议材料</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {materials.map((material) => {
-              const uploader = getUploader(material.uploadedBy);
+          <div className="space-y-4">
+            {materialGroups.map((group) => {
+              const isExpanded = expandedGroups.has(group.parentId);
+              const latestVersion = group.latestVersion;
+              const uploader = getUploader(latestVersion.uploadedBy);
+
               return (
-                <div
-                  key={material.id}
-                  className="group flex items-center gap-4 p-3.5 rounded-xl border border-neutral-100 hover:border-accent-200 hover:bg-accent-50/30 transition-all"
-                >
-                  <TypeIcon type={material.type} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-neutral-800 font-medium text-sm truncate">
-                        {material.name}
-                      </p>
-                      <span
-                        className={cn(
-                          'flex-shrink-0 px-2 py-0.5 rounded-md text-xs font-medium',
-                          typeColors[material.type]
-                        )}
-                      >
-                        {typeLabels[material.type]}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-400">
-                      <span>{formatFileSize(material.size)}</span>
-                      <span>·</span>
-                      <span>{formatDate(material.uploadedAt)}</span>
-                      {uploader && (
-                        <>
-                          <span>·</span>
-                          <span className="flex items-center gap-1">
-                            <img
-                              src={uploader.avatar}
-                              alt={uploader.name}
-                              className="w-4 h-4 rounded-full object-cover"
-                            />
-                            {uploader.name}
+                <div key={group.parentId} className="border border-neutral-100 rounded-xl overflow-hidden">
+                  <div className="group flex items-center gap-4 p-3.5 bg-white hover:bg-accent-50/30 transition-all">
+                    <TypeIcon type={group.type} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-neutral-800 font-medium text-sm truncate">
+                          {group.name}
+                        </p>
+                        <span
+                          className={cn(
+                            'flex-shrink-0 px-2 py-0.5 rounded-md text-xs font-medium',
+                            typeColors[group.type]
+                          )}
+                        >
+                          {typeLabels[group.type]}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-gradient-accent text-white text-xs font-medium">
+                          v{latestVersion.version} · 最新
+                        </span>
+                        {group.versionCount > 1 && (
+                          <span className="px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-500 text-xs">
+                            共 {group.versionCount} 个版本
                           </span>
-                        </>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-400">
+                        <span>{formatFileSize(latestVersion.size)}</span>
+                        <span>·</span>
+                        <span>{formatDate(latestVersion.uploadedAt)}</span>
+                        {uploader && (
+                          <>
+                            <span>·</span>
+                            <span className="flex items-center gap-1">
+                              <img
+                                src={uploader.avatar}
+                                alt={uploader.name}
+                                className="w-4 h-4 rounded-full object-cover"
+                              />
+                              {uploader.name}
+                            </span>
+                          </>
+                        )}
+                        {latestVersion.versionNote && (
+                          <>
+                            <span>·</span>
+                            <span className="text-accent-600 truncate max-w-[200px]">
+                              {latestVersion.versionNote}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setPreviewMaterial(latestVersion)}
+                        className="p-2 rounded-lg text-neutral-400 hover:bg-accent-50 hover:text-accent-600 transition-all"
+                        title="预览"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDownload(latestVersion)}
+                        className="p-2 rounded-lg text-neutral-400 hover:bg-primary-50 hover:text-primary-600 transition-all"
+                        title="下载"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                      {!readOnly && (
+                        <button
+                          onClick={() => onRemove?.(latestVersion.id)}
+                          className="p-2 rounded-lg text-neutral-400 hover:bg-danger-50 hover:text-danger-500 transition-all"
+                          title="删除"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      {group.versionCount > 1 && (
+                        <button
+                          onClick={() => toggleGroup(group.parentId)}
+                          className="p-2 rounded-lg text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 transition-all ml-1"
+                          title={isExpanded ? '收起历史版本' : '展开历史版本'}
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                        </button>
                       )}
                     </div>
                   </div>
-                  <div className={cn(
-                    'flex-shrink-0 flex items-center gap-1 transition-opacity',
-                    readOnly ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                  )}>
-                    <button
-                      onClick={() => setPreviewMaterial(material)}
-                      className="p-2 rounded-lg text-neutral-400 hover:bg-accent-50 hover:text-accent-600 transition-all"
-                      title="预览"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDownload(material)}
-                      className="p-2 rounded-lg text-neutral-400 hover:bg-primary-50 hover:text-primary-600 transition-all"
-                      title="下载"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
-                    {!readOnly && (
-                      <button
-                        onClick={() => onRemove?.(material.id)}
-                        className="p-2 rounded-lg text-neutral-400 hover:bg-danger-50 hover:text-danger-500 transition-all"
-                        title="删除"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
+
+                  {isExpanded && group.versionCount > 1 && (
+                    <div className="border-t border-neutral-100 overflow-hidden transition-all duration-300">
+                      {group.versions.filter(v => !v.isLatest).map((version) => {
+                        const versionUploader = getUploader(version.uploadedBy);
+                        return (
+                          <div
+                            key={version.id}
+                            className="group flex items-center gap-4 p-3.5 bg-gradient-to-r from-neutral-50 to-neutral-100/50 border-b border-neutral-100 last:border-b-0 transition-all hover:from-neutral-100 hover:to-neutral-100/70"
+                            style={{
+                              backgroundImage: `repeating-linear-gradient(
+                                45deg,
+                                transparent,
+                                transparent 10px,
+                                rgba(0,0,0,0.015) 10px,
+                                rgba(0,0,0,0.015) 20px
+                              )`,
+                            }}
+                          >
+                            <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-neutral-200/50 opacity-60">
+                              {(() => {
+                                const Icon = typeIcons[version.type];
+                                return <Icon className="w-5 h-5 text-neutral-500" />;
+                              })()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-neutral-600 font-medium text-sm truncate">
+                                  v{version.version}
+                                </p>
+                                <span className="px-2 py-0.5 rounded-full bg-neutral-200 text-neutral-500 text-xs">
+                                  历史版本
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-400">
+                                <span>{formatFileSize(version.size)}</span>
+                                <span>·</span>
+                                <span>{formatDate(version.uploadedAt)}</span>
+                                {versionUploader && (
+                                  <>
+                                    <span>·</span>
+                                    <span className="flex items-center gap-1">
+                                      <img
+                                        src={versionUploader.avatar}
+                                        alt={versionUploader.name}
+                                        className="w-4 h-4 rounded-full object-cover opacity-70"
+                                      />
+                                      {versionUploader.name}
+                                    </span>
+                                  </>
+                                )}
+                                {version.versionNote && (
+                                  <>
+                                    <span>·</span>
+                                    <span className="text-neutral-500 truncate max-w-[200px] italic">
+                                      "{version.versionNote}"
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => setPreviewMaterial(version)}
+                                className="p-2 rounded-lg text-neutral-400 hover:bg-accent-50 hover:text-accent-600 transition-all"
+                                title="预览此版本"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDownload(version)}
+                                className="p-2 rounded-lg text-neutral-400 hover:bg-primary-50 hover:text-primary-600 transition-all"
+                                title="下载此版本"
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                              {!readOnly && (
+                                <button
+                                  onClick={() => onSetLatest?.(version.id)}
+                                  className="flex items-center gap-1 px-2.5 py-2 rounded-lg text-neutral-500 hover:bg-accent-50 hover:text-accent-600 transition-all text-xs font-medium"
+                                  title="恢复为最新版本"
+                                >
+                                  <RotateCcw className="w-4 h-4" />
+                                  <span className="hidden sm:inline">恢复</span>
+                                </button>
+                              )}
+                              {!readOnly && (
+                                <button
+                                  onClick={() => onRemove?.(version.id)}
+                                  className="p-2 rounded-lg text-neutral-400 hover:bg-danger-50 hover:text-danger-500 transition-all"
+                                  title="删除此版本"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -671,9 +1037,18 @@ export default function MaterialPanel({
       {previewMaterial && (
         <PreviewModal
           material={previewMaterial}
+          allVersions={materialGroups.find(g => g.parentId === previewMaterial.parentId)?.versions || []}
           uploader={getUploader(previewMaterial.uploadedBy)}
           onClose={() => setPreviewMaterial(null)}
           onDownload={handleDownload}
+        />
+      )}
+
+      {pendingFile && (
+        <VersionNoteModal
+          fileName={pendingFile.file.name}
+          onConfirm={handleConfirmVersion}
+          onCancel={handleCancelVersion}
         />
       )}
     </div>

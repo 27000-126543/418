@@ -9,6 +9,7 @@ import type {
   Attendee,
   Notification,
   ResourceChange,
+  PreMeetingChecklistItem,
 } from '@/types';
 import { mockMeetings } from '@/data/meetings';
 import { mockUsers } from '@/data/users';
@@ -45,8 +46,10 @@ interface MeetingStoreActions {
     userId: string,
     status: AttendanceStatus
   ) => Meeting | undefined;
-  addMaterial: (meetingId: string, material: Omit<Material, 'id' | 'uploadedAt'>) => Meeting | undefined;
+  addMaterial: (meetingId: string, material: Omit<Material, 'id' | 'uploadedAt' | 'version' | 'parentId' | 'isLatest'>) => Meeting | undefined;
   removeMaterial: (meetingId: string, materialId: string) => Meeting | undefined;
+  getMaterialVersions: (meetingId: string, parentId: string) => Material[];
+  setMaterialLatestVersion: (meetingId: string, materialId: string) => Meeting | undefined;
   addAgendaItem: (meetingId: string, item: Omit<AgendaItem, 'id'>) => Meeting | undefined;
   updateAgendaItem: (
     meetingId: string,
@@ -63,6 +66,17 @@ interface MeetingStoreActions {
   startMeeting: (meetingId: string) => Meeting | undefined;
   endMeeting: (meetingId: string) => Meeting | undefined;
   cancelMeeting: (meetingId: string) => Meeting | undefined;
+  toggleChecklistItem: (
+    meetingId: string,
+    itemId: string,
+    completed: boolean,
+    userId: string
+  ) => Meeting | undefined;
+  addChecklistItem: (
+    meetingId: string,
+    item: Omit<PreMeetingChecklistItem, 'id'>
+  ) => Meeting | undefined;
+  removeChecklistItem: (meetingId: string, itemId: string) => Meeting | undefined;
 }
 
 export type MeetingStore = MeetingStoreState & MeetingStoreActions;
@@ -153,6 +167,55 @@ export const useMeetingStore = create<MeetingStore>((set, get) => ({
       throw new Error(`Room not found: ${data.roomId}`);
     }
 
+    const preMeetingChecklist: PreMeetingChecklistItem[] = [
+      {
+        id: generateId(),
+        category: 'agenda',
+        title: '议程已填写',
+        description: '确认会议议程是否已完整填写',
+        completed: agenda.length > 0,
+        completedAt: agenda.length > 0 ? new Date() : undefined,
+        completedBy: agenda.length > 0 ? createdBy : undefined,
+        autoDetect: true,
+      },
+      {
+        id: generateId(),
+        category: 'material',
+        title: '材料已上传',
+        description: '确认会议所需材料是否已上传',
+        completed: false,
+        autoDetect: true,
+      },
+      {
+        id: generateId(),
+        category: 'attendance',
+        title: '参会人已响应',
+        description: '确认80%以上参会人已确认出席',
+        completed: false,
+        autoDetect: true,
+      },
+      {
+        id: generateId(),
+        category: 'catering',
+        title: '餐饮已确认',
+        description: '确认餐饮安排是否已落实',
+        completed: catering.length > 0 || data.cateringIds.length === 0,
+        completedAt: catering.length > 0 || data.cateringIds.length === 0 ? new Date() : undefined,
+        completedBy: catering.length > 0 || data.cateringIds.length === 0 ? createdBy : undefined,
+        autoDetect: true,
+      },
+      {
+        id: generateId(),
+        category: 'device',
+        title: '设备已预定',
+        description: '确认所需设备是否已预定',
+        completed: devices.length > 0 || data.deviceIds.length === 0,
+        completedAt: devices.length > 0 || data.deviceIds.length === 0 ? new Date() : undefined,
+        completedBy: devices.length > 0 || data.deviceIds.length === 0 ? createdBy : undefined,
+        autoDetect: true,
+      },
+    ];
+
     const newMeeting: Meeting = {
       id: generateId(),
       title: data.title,
@@ -175,6 +238,7 @@ export const useMeetingStore = create<MeetingStore>((set, get) => ({
       status: 'scheduled',
       createdAt: new Date(),
       createdBy,
+      preMeetingChecklist,
     };
 
     set(state => ({
@@ -279,20 +343,98 @@ export const useMeetingStore = create<MeetingStore>((set, get) => ({
     return updated;
   },
 
-  addMaterial: (meetingId: string, material: Omit<Material, 'id' | 'uploadedAt'>) => {
+  addMaterial: (meetingId: string, material: Omit<Material, 'id' | 'uploadedAt' | 'version' | 'parentId' | 'isLatest'>) => {
     let updated: Meeting | undefined;
-    const newMaterial: Material = {
-      ...material,
-      id: generateId(),
-      uploadedAt: new Date(),
-    };
+    const newId = generateId();
 
     set(state => {
       const meetings = state.meetings.map(meeting => {
         if (meeting.id !== meetingId) return meeting;
+
+        const existingMaterials = meeting.materials;
+        const sameNameMaterials = existingMaterials.filter(m => m.name === material.name);
+
+        let version: number;
+        let parentId: string;
+        let isLatest = true;
+
+        if (sameNameMaterials.length > 0) {
+          const maxVersion = Math.max(...sameNameMaterials.map(m => m.version));
+          version = maxVersion + 1;
+          parentId = sameNameMaterials[0].parentId;
+        } else {
+          version = 1;
+          parentId = newId;
+        }
+
+        const newMaterial: Material = {
+          ...material,
+          id: newId,
+          uploadedAt: new Date(),
+          version,
+          parentId,
+          isLatest,
+        };
+
+        const updatedMaterials = existingMaterials.map(m => {
+          if (m.name === material.name) {
+            return { ...m, isLatest: false };
+          }
+          return m;
+        });
+
+        updatedMaterials.push(newMaterial);
+
+        updatedMaterials.sort((a, b) => {
+          if (a.name !== b.name) return a.name.localeCompare(b.name);
+          return b.version - a.version;
+        });
+
         updated = {
           ...meeting,
-          materials: [...meeting.materials, newMaterial],
+          materials: updatedMaterials,
+        };
+        return updated;
+      });
+      return { meetings };
+    });
+
+    return updated;
+  },
+
+  getMaterialVersions: (meetingId: string, parentId: string) => {
+    const meeting = get().getMeetingById(meetingId);
+    if (!meeting) return [];
+    return meeting.materials
+      .filter(m => m.parentId === parentId)
+      .sort((a, b) => b.version - a.version);
+  },
+
+  setMaterialLatestVersion: (meetingId: string, materialId: string) => {
+    let updated: Meeting | undefined;
+
+    set(state => {
+      const meetings = state.meetings.map(meeting => {
+        if (meeting.id !== meetingId) return meeting;
+
+        const targetMaterial = meeting.materials.find(m => m.id === materialId);
+        if (!targetMaterial) return meeting;
+
+        const updatedMaterials = meeting.materials.map(m => {
+          if (m.parentId === targetMaterial.parentId) {
+            return { ...m, isLatest: m.id === materialId };
+          }
+          return m;
+        });
+
+        updatedMaterials.sort((a, b) => {
+          if (a.name !== b.name) return a.name.localeCompare(b.name);
+          return b.version - a.version;
+        });
+
+        updated = {
+          ...meeting,
+          materials: updatedMaterials,
         };
         return updated;
       });
@@ -499,5 +641,77 @@ export const useMeetingStore = create<MeetingStore>((set, get) => ({
 
   cancelMeeting: (meetingId: string) => {
     return get().updateMeeting(meetingId, { status: 'cancelled' });
+  },
+
+  toggleChecklistItem: (
+    meetingId: string,
+    itemId: string,
+    completed: boolean,
+    userId: string
+  ) => {
+    let updated: Meeting | undefined;
+
+    set(state => {
+      const meetings = state.meetings.map(meeting => {
+        if (meeting.id !== meetingId) return meeting;
+
+        const checklist = meeting.preMeetingChecklist?.map(item => {
+          if (item.id !== itemId) return item;
+          return {
+            ...item,
+            completed,
+            completedAt: completed ? new Date() : undefined,
+            completedBy: completed ? userId : undefined,
+          };
+        }) ?? [];
+
+        updated = { ...meeting, preMeetingChecklist: checklist };
+        return updated;
+      });
+      return { meetings };
+    });
+
+    return updated;
+  },
+
+  addChecklistItem: (
+    meetingId: string,
+    item: Omit<PreMeetingChecklistItem, 'id'>
+  ) => {
+    let updated: Meeting | undefined;
+    const newItem: PreMeetingChecklistItem = {
+      ...item,
+      id: generateId(),
+    };
+
+    set(state => {
+      const meetings = state.meetings.map(meeting => {
+        if (meeting.id !== meetingId) return meeting;
+
+        const checklist = [...(meeting.preMeetingChecklist ?? []), newItem];
+        updated = { ...meeting, preMeetingChecklist: checklist };
+        return updated;
+      });
+      return { meetings };
+    });
+
+    return updated;
+  },
+
+  removeChecklistItem: (meetingId: string, itemId: string) => {
+    let updated: Meeting | undefined;
+
+    set(state => {
+      const meetings = state.meetings.map(meeting => {
+        if (meeting.id !== meetingId) return meeting;
+
+        const checklist = meeting.preMeetingChecklist?.filter(item => item.id !== itemId) ?? [];
+        updated = { ...meeting, preMeetingChecklist: checklist };
+        return updated;
+      });
+      return { meetings };
+    });
+
+    return updated;
   },
 }));
